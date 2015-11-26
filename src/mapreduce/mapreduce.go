@@ -64,6 +64,8 @@ type MapReduce struct {
   Workers map[string]*WorkerInfo 
 
   // add any additional state here
+  // worker address who finish own job
+  WorkerDoneChannel chan string
 }
 
 func InitMapReduce(nmap int, nreduce int,
@@ -76,6 +78,7 @@ func InitMapReduce(nmap int, nreduce int,
   mr.alive = true
   mr.registerChannel = make(chan string)
   mr.DoneChannel = make(chan bool)
+  mr.WorkerDoneChannel = make(chan string)
 
   // initialize any additional state here
   return mr
@@ -220,8 +223,10 @@ func DoMap(JobNumber int, fileName string,
     log.Fatal("DoMap: ", err);
   }
   file.Close()
+  // fmt.Printf("file content : \n %s \n", string(b))
   //string(b) is file content, res is a list
   res := Map(string(b))
+
   // XXX a bit inefficient. could open r files and run over list once
   for r := 0; r < nreduce; r++ {
     file, err = os.Create(ReduceName(fileName, JobNumber, r))
@@ -230,6 +235,7 @@ func DoMap(JobNumber int, fileName string,
     }
     enc := json.NewEncoder(file)
     for e := res.Front(); e != nil; e = e.Next() {
+      //.(KeyValue):d                               ; type check
       kv := e.Value.(KeyValue) 
       if hash(kv.Key) % uint32(nreduce) == uint32(r) {
         err := enc.Encode(&kv);

@@ -5,7 +5,10 @@ import "fmt"
 type WorkerInfo struct {
   address string
   // You can add definitions here.
+
 }
+
+
 
 
 // Clean up all workers by sending a Shutdown RPC to each one of them Collect
@@ -27,6 +30,64 @@ func (mr *MapReduce) KillWorkers() *list.List {
 }
 
 func (mr *MapReduce) RunMaster() *list.List {
-  // Your code here
+
+  // run background, when worker finish jod, register its address back to channel
+  go mr.DoRegister()
+
+  // sent map job to available worker
+  for i := 0; i < nMap; i++ {
+    WorkerAddress := <- mr.registerChannel
+    arg := &DoJobArgs{}
+
+    arg.File = mr.file
+    arg.Operation = Map
+    arg.JobNumber  = i       
+    arg.NumOtherPhase = nReduce
+
+    var reply DoJobReply
+    ok := call(WorkerAddress, "Worker.DoJob", arg, &reply)
+
+    if reply.OK == true {
+      mr.WorkerDoneChannel <- WorkerAddress
+    }
+    
+    if ok == false {
+      fmt.Printf("Register: RPC %s register error\n", WorkerAddress)
+    }
+
+    fmt.Printf("Finish: Worker %s finish map job %d\n", WorkerAddress, i)
+  
+  }
+
+  // sent reduce job to available worker
+  for i := 0; i < nReduce; i++ {
+    WorkerAddress := <- mr.registerChannel
+    arg := &DoJobArgs{}
+
+    arg.File = mr.file
+    arg.Operation = Reduce
+    arg.JobNumber  = i       
+    arg.NumOtherPhase = nMap
+
+    var reply DoJobReply
+    ok := call(WorkerAddress, "Worker.DoJob", arg, &reply)
+
+    if reply.OK == true {
+      mr.WorkerDoneChannel <- WorkerAddress
+    }
+
+    if ok == false {
+      fmt.Printf("Register: RPC %s register error\n", WorkerAddress)
+    }
+
+    fmt.Printf("Finish: Worker %s finish reduce job %d\n", WorkerAddress, i)
+
+  }
+
   return mr.KillWorkers()
+}
+
+func (mr *MapReduce) DoRegister() {
+  WorkerAddress := <- mr.WorkerDoneChannel
+  Register(mr.MasterAddress, WorkerAddress)
 }

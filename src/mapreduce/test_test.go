@@ -24,6 +24,7 @@ func MapFunc(value string) *list.List {
   DPrintf("Map %v\n", value)
   res := list.New()
   words := strings.Fields(value);
+  //range's first parameter is index, second parameter is value
   for _, w := range words {
     kv := KeyValue{w, ""}
     res.PushBack(kv)
@@ -122,6 +123,7 @@ func port(suffix string) string {
 
 func setup() *MapReduce {
   file := makeInput()
+  //master is a path string , for now is /var/tmp/824-1000/mr2978-master
   master := port("master")
   mr := MakeMapReduce(nMap, nReduce, file, master)
   return mr
@@ -136,6 +138,9 @@ func TestBasic(t *testing.T) {
   fmt.Printf("Test: Basic mapreduce ...\n")
   mr := setup()
   for i := 0; i < 2; i++ {
+    // RunWorker(MasterAddress string, me string,
+    //            MapFunc func(string) *list.List,
+    //            ReduceFunc func(string,*list.List) string, nRPC int)
     go RunWorker(mr.MasterAddress, port("worker" + strconv.Itoa(i)),
                  MapFunc, ReduceFunc, -1)
   }

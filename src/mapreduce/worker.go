@@ -53,6 +53,7 @@ func Register(master string, me string) {
   if ok == false {
     fmt.Printf("Register: RPC %s register error\n", master)
   }
+  fmt.Printf("Register: worker %s register master\n", me)
 }
 
 // Set up a connection with the master, register with the master,
