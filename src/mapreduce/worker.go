@@ -20,9 +20,9 @@ type Worker struct {
 
 // The master sent us a job
 func (wk *Worker) DoJob(arg *DoJobArgs, res *DoJobReply) error {
-  fmt.Printf("Dojob %s job %d file %s operation %v N %d\n",
-             wk.name, arg.JobNumber, arg.File, arg.Operation,
-             arg.NumOtherPhase)
+  // fmt.Printf("Dojob %s job %d file %s operation %v N %d\n",
+  //            wk.name, arg.JobNumber, arg.File, arg.Operation,
+  //            arg.NumOtherPhase)
   switch arg.Operation {
   case Map:
     DoMap(arg.JobNumber, arg.File, arg.NumOtherPhase, wk.Map)
@@ -53,7 +53,7 @@ func Register(master string, me string) {
   if ok == false {
     fmt.Printf("Register: RPC %s register error\n", master)
   }
-  fmt.Printf("Register: worker %s register master\n", me)
+  fmt.Printf("[Register] worker %s register\n", me)
 }
 
 // Set up a connection with the master, register with the master,

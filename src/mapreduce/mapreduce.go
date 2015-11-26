@@ -78,7 +78,7 @@ func InitMapReduce(nmap int, nreduce int,
   mr.alive = true
   mr.registerChannel = make(chan string)
   mr.DoneChannel = make(chan bool)
-  mr.WorkerDoneChannel = make(chan string)
+  mr.WorkerDoneChannel = make(chan string, 2)
 
   // initialize any additional state here
   return mr
@@ -93,14 +93,14 @@ func MakeMapReduce(nmap int, nreduce int,
 }
 
 func (mr *MapReduce) Register(args *RegisterArgs, res *RegisterReply) error {
-  DPrintf("Register: worker %s\n", args.Worker)
+  DPrintf("[Register] worker %s\n", args.Worker)
   mr.registerChannel <- args.Worker
   res.OK = true
   return nil
 }
 
 func (mr *MapReduce) Shutdown(args *ShutdownArgs, res *ShutdownReply) error {
-  DPrintf("Shutdown: registration server\n")
+  DPrintf("[Shutdown] registration server\n")
   mr.alive = false
   mr.l.Close()    // causes the Accept to fail
   return nil
@@ -143,7 +143,7 @@ func MapName(fileName string, MapJob int) string {
 
 // Split bytes of input file into nMap splits, but split only on white space
 func (mr *MapReduce) Split(fileName string) {
-  fmt.Printf("Split %s\n", fileName)
+  fmt.Printf("[Split] split %s\n", fileName)
   infile, err := os.Open(fileName);
   if err != nil {
     log.Fatal("Split: ", err);
@@ -214,7 +214,7 @@ func DoMap(JobNumber int, fileName string,
   }
   //each split file size
   size := fi.Size()
-  fmt.Printf("DoMap: read split %s %d\n", name, size)
+  fmt.Printf("[DoMap] read split %s %d\n", name, size)
   b := make([]byte, size);
 
   //read file content into byte array
@@ -259,7 +259,7 @@ func DoReduce(job int, fileName string, nmap int,
   kvs := make(map[string]*list.List)
   for i := 0; i < nmap; i++ {
     name := ReduceName(fileName, i, job)
-    fmt.Printf("DoReduce: read %s\n", name)
+    fmt.Printf("[DoReduce] read %s\n", name)
     file, err := os.Open(name)
     if err != nil {
       log.Fatal("DoReduce: ", err);
