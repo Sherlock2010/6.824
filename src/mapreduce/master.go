@@ -1,6 +1,7 @@
 package mapreduce
 import "container/list"
 import "fmt"
+import "time"
 
 type WorkerInfo struct {
   address string
@@ -47,17 +48,35 @@ func (mr *MapReduce) RunMaster() *list.List {
       ok := call(WorkerAddress, "Worker.DoJob", arg, &reply)
   
       if ok == false {
-        fmt.Printf("Register: RPC %s register error\n", WorkerAddress)
+        fmt.Printf("[Error] RPC %s register error\n", WorkerAddress)
       } else {
+        fmt.Printf("[Info] RPC return true, channel size %d\n", len(mr.WorkerDoneChannel))
         if reply.OK == true {        
-          mr.WorkerDoneChannel <- WorkerAddress
+          
+          // time out
+          timeout := make (chan bool, 1)
+          go func() {
+              time.Sleep(1e9) // sleep one second
+              timeout <- true
+          }()
+        
+          select {
+          case mr.WorkerDoneChannel <- WorkerAddress:
+          case <- timeout:
+              TimeOutWorkerAddress := <- mr.WorkerDoneChannel
+              fmt.Println("[Error] Worker %s timeout! remove from channel", TimeOutWorkerAddress)
+          }
+
           break;
           // fmt.Printf("[Channel] Worker %s push to channel, channel size %d\n", WorkerAddress, len(mr.WorkerDoneChannel))
 
+        } else {
+          fmt.Printf("[Error] RPC return false\n")
         }
       }
+
+      fmt.Printf("[Finish] Worker %s finish map job %d\n\n", WorkerAddress, i)
     }
-    // fmt.Printf("[Finish] Worker %s finish map job %d\n\n", WorkerAddress, i)
   
   }
 
@@ -76,16 +95,33 @@ func (mr *MapReduce) RunMaster() *list.List {
       ok := call(WorkerAddress, "Worker.DoJob", arg, &reply)
   
       if ok == false {
-        // fmt.Printf("[Register] RPC %s register error\n", WorkerAddress)
+        fmt.Printf("[Register] RPC %s register error\n", WorkerAddress)
       } else {
+        fmt.Printf("[Info] RPC return true, channel size %d\n", len(mr.WorkerDoneChannel))
         if reply.OK == true {
-          mr.WorkerDoneChannel <- WorkerAddress
+
+          // time out
+          timeout := make (chan bool, 1)
+          go func() {
+              time.Sleep(1e9) // sleep one second
+              timeout <- true
+          }()
+        
+          select {
+          case mr.WorkerDoneChannel <- WorkerAddress:
+          case <- timeout:
+              TimeOutWorkerAddress := <- mr.WorkerDoneChannel
+              fmt.Println("[Error] Worker %s timeout! remove from channel", TimeOutWorkerAddress)
+          }
+
           // fmt.Printf("[Push] Worker %s push to channel\n", WorkerAddress)
           break;
+        } else {
+          fmt.Printf("[Error] RPC return false\n")
         }
       }
 
-      // fmt.Printf("[Finish] Worker %s finish reduce job %d\n\n", WorkerAddress, i)
+      fmt.Printf("[Finish] Worker %s finish reduce job %d\n\n", WorkerAddress, i)
 
     }
     

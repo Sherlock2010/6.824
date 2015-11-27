@@ -88,6 +88,9 @@ func RunWorker(MasterAddress string, me string,
       break
     }
   }
+  if wk.nRPC == 0 {
+    fmt.Printf("[Error] nRPC zero, %s Fail\n", me)
+  }
   wk.l.Close()
   DPrintf("RunWorker %s exit\n", me)    
 }
