@@ -33,64 +33,62 @@ func (mr *MapReduce) RunMaster() *list.List {
 
   // sent map job to available worker
   for i := 0; i < nMap; i++ {
-    fmt.Printf("[Pre] pull from register channel, channel size %d\n", len(mr.registerChannel))
-    WorkerAddress := <- mr.registerChannel
-    arg := &DoJobArgs{}
-
-    arg.File = mr.file
-    arg.Operation = Map
-    arg.JobNumber  = i       
-    arg.NumOtherPhase = nReduce
-
-    var reply DoJobReply
-    ok := call(WorkerAddress, "Worker.DoJob", arg, &reply)
-
-    if reply.OK == true {
-
-      if mr.WorkerDoneChannel != nil {
-        fmt.Printf("[Pre] Worker %s pre to channel, channel size %d\n",WorkerAddress, len(mr.WorkerDoneChannel))
-       
-        mr.WorkerDoneChannel <- WorkerAddress
-
-        fmt.Printf("[Channel] Worker %s push to channel, channel size %d\n", WorkerAddress, len(mr.WorkerDoneChannel))
+    for{
+      fmt.Printf("[Pre] pull from register channel, channel size %d\n", len(mr.registerChannel))
+      WorkerAddress := <- mr.registerChannel
+      arg := &DoJobArgs{}
+  
+      arg.File = mr.file
+      arg.Operation = Map
+      arg.JobNumber  = i       
+      arg.NumOtherPhase = nReduce
+  
+      var reply DoJobReply
+      ok := call(WorkerAddress, "Worker.DoJob", arg, &reply)
+  
+      if ok == false {
+        fmt.Printf("Register: RPC %s register error\n", WorkerAddress)
       } else {
-        fmt.Printf("[Error] WorkerDoneChannel is nil\n")
-      }
-    
-    }
-    
-    if ok == false {
-      fmt.Printf("Register: RPC %s register error\n", WorkerAddress)
-    }
+        if reply.OK == true {        
+          mr.WorkerDoneChannel <- WorkerAddress
+          break;
+          // fmt.Printf("[Channel] Worker %s push to channel, channel size %d\n", WorkerAddress, len(mr.WorkerDoneChannel))
 
-    fmt.Printf("[Finish] Worker %s finish map job %d\n\n", WorkerAddress, i)
+        }
+      }
+    }
+    // fmt.Printf("[Finish] Worker %s finish map job %d\n\n", WorkerAddress, i)
   
   }
 
   // sent reduce job to available worker
   for i := 0; i < nReduce; i++ {
-    WorkerAddress := <- mr.registerChannel
-    arg := &DoJobArgs{}
+    for {
+      WorkerAddress := <- mr.registerChannel
+      arg := &DoJobArgs{}
+  
+      arg.File = mr.file
+      arg.Operation = Reduce
+      arg.JobNumber  = i       
+      arg.NumOtherPhase = nMap
+  
+      var reply DoJobReply
+      ok := call(WorkerAddress, "Worker.DoJob", arg, &reply)
+  
+      if ok == false {
+        // fmt.Printf("[Register] RPC %s register error\n", WorkerAddress)
+      } else {
+        if reply.OK == true {
+          mr.WorkerDoneChannel <- WorkerAddress
+          // fmt.Printf("[Push] Worker %s push to channel\n", WorkerAddress)
+          break;
+        }
+      }
 
-    arg.File = mr.file
-    arg.Operation = Reduce
-    arg.JobNumber  = i       
-    arg.NumOtherPhase = nMap
+      // fmt.Printf("[Finish] Worker %s finish reduce job %d\n\n", WorkerAddress, i)
 
-    var reply DoJobReply
-    ok := call(WorkerAddress, "Worker.DoJob", arg, &reply)
-
-    if reply.OK == true {
-      mr.WorkerDoneChannel <- WorkerAddress
-      fmt.Printf("[Push] Worker %s push to channel\n", WorkerAddress)
     }
-
-    if ok == false {
-      fmt.Printf("[Register] RPC %s register error\n", WorkerAddress)
-    }
-
-    fmt.Printf("[Finish] Worker %s finish reduce job %d\n\n", WorkerAddress, i)
-
+    
   }
 
   return mr.KillWorkers()
