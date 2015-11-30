@@ -15,8 +15,18 @@ type ViewServer struct {
   dead bool
   me string
 
-
   // Your declarations here.
+  currentView View
+  nextView View
+}
+
+func MakeView(Viewnum uint, Primary string, Backup string) {
+  view := new(View)
+
+  view.Viewnum = Viewnum
+  view.Primary = Primary
+
+  return view
 }
 
 //
@@ -25,6 +35,34 @@ type ViewServer struct {
 func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 
   // Your code here.
+  server := PingArgs.me
+  num := PingArgs.Viewnum
+
+  if vs.currentView == nil {
+    //first server in
+    view := MakeView(num, server, "")
+
+    vs.currentView = view
+    vs.nextView = view
+    
+    return view
+
+  } else {
+    //primary server already elected
+    if num == 0 {
+      //new server in or old server crashed
+      vs.nextView.Backup += server + ";"
+    } else {
+      //exist server Ping
+
+      if(server == currentView.Primary){
+        
+      }
+         
+    } 
+
+    
+  }
 
   return nil
 }
