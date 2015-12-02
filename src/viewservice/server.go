@@ -16,15 +16,18 @@ type ViewServer struct {
   me string
 
   // Your declarations here.
-  currentView View
-  nextView View
+  currentView *View //already acked
+  nextView *View //prepared acked
+  ack bool // currentView is acked
+  backups map[string]bool
 }
 
-func MakeView(Viewnum uint, Primary string, Backup string) {
+func MakeView(Viewnum uint, Primary string, Backup string) *View {
   view := new(View)
 
   view.Viewnum = Viewnum
   view.Primary = Primary
+  view.Backup = Backup
 
   return view
 }
@@ -35,33 +38,58 @@ func MakeView(Viewnum uint, Primary string, Backup string) {
 func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 
   // Your code here.
-  server := PingArgs.me
-  num := PingArgs.Viewnum
+  server := args.Me
+  num := args.Viewnum
 
   if vs.currentView == nil {
-    //first server in
-    view := MakeView(num, server, "")
+    //first server in, init currentView and nextView
+    vs.currentView = MakeView(1, server, "")
+    vs.nextView = MakeView(1, server, "")
 
-    vs.currentView = view
-    vs.nextView = view
+    vs.backups = make(map[string]bool)
+    vs.ack = false
+    reply.View = *(vs.currentView)
+    fmt.Printf("[Info] First primary %s in , view number %d ...\n", reply.View.Primary, reply.View.Viewnum)
     
-    return view
-
   } else {
     //primary server already elected
     if num == 0 {
-      //new server in or old server crashed
-      vs.nextView.Backup += server + ";"
+      //new server in or old server crashed, do the same thing
+      reply.View = *(vs.currentView)
+
+      _, ok := vs.backups[server]
+      if !ok {
+        // vs.nextView.Backup += server + ";"
+        vs.nextView.Backup += server
+        vs.backups[server] = true
+        vs.ack = false
+        vs.nextView.Viewnum ++
+        fmt.Printf("[Info] %s become backup, primary is %s ...\n", server, vs.currentView.Primary)
+      }
+     
+      
     } else {
       //exist server Ping
 
-      if(server == currentView.Primary){
+      if (server == vs.currentView.Primary) {
+        if num == vs.currentView.Viewnum && !vs.ack{
+          *(vs.currentView) = *(vs.nextView)
+          reply.View = *(vs.currentView)
+
+          vs.ack = true
+
+          fmt.Printf("[Info] change view, currentView num %d ...\n", vs.currentView.Viewnum)
+        } else {
+          fmt.Printf("[Info] primary %s Ping , current view num %d ...\n", server, vs.currentView.Viewnum)
+        }
         
+      } else {
+        reply.View = *(vs.currentView)
+        //do nothing
+        fmt.Printf("[Info] backup %s Ping ...\n", server)
       }
          
-    } 
-
-    
+    }  
   }
 
   return nil
@@ -73,6 +101,13 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
 
   // Your code here.
+  if vs.currentView != nil {
+    reply.View = *(vs.currentView)
+  } else {
+    fmt.Printf("[Error] Get view error\n")
+    view := MakeView(0, "", "")
+    reply.View = *view
+  }
 
   return nil
 }

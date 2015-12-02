@@ -9,6 +9,7 @@ import "strconv"
 
 func check(t *testing.T, ck *Clerk, p string, b string, n uint) {
   view, _ := ck.Get()
+
   if view.Primary != p {
     t.Fatalf("wanted primary %v, got %v", p, view.Primary)
   }
@@ -19,7 +20,7 @@ func check(t *testing.T, ck *Clerk, p string, b string, n uint) {
     t.Fatalf("wanted viewnum %v, got %v", n, view.Viewnum)
   }
   if ck.Primary() != p {
-    t.Fatalf("wanted primary %v, got %v", p, ck.Primary())
+    t.Fatalf("wanted primary %v, got %v ...", p, ck.Primary())
   }
 }
 
@@ -51,10 +52,12 @@ func Test1(t *testing.T) {
 
   // very first primary
   fmt.Printf("Test: First primary ...\n")
-
+  fmt.Printf("[Info] first server %s ...\n", ck1.me)
   for i := 0; i < DeadPings * 2; i++ {
     view, _ := ck1.Ping(0)
+    // fmt.Printf("[Info] view.Primary %s ---> ck1.me %s\n", view.Primary, ck1.me)
     if view.Primary == ck1.me {
+      // fmt.Printf("[Info] view.Primary = ck1.me\n")
       break
     }
     time.Sleep(PingInterval)
@@ -71,6 +74,7 @@ func Test1(t *testing.T) {
       ck1.Ping(1)
       view, _ := ck2.Ping(0)
       if view.Backup == ck2.me {
+        fmt.Printf("[Info] view.Backup == ck2.me ...\n")
         break
       }
       time.Sleep(PingInterval)
