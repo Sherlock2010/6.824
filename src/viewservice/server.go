@@ -40,7 +40,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
   // Your code here.
   server := args.Me
   num := args.Viewnum
-
+  
   if vs.currentView == nil {
     //first server in, init currentView and nextView
     vs.currentView = MakeView(1, server, "")
@@ -61,6 +61,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
       reply.View = *(vs.currentView)
 
       _, ok := vs.servers[server]
+
       if !ok {
         // vs.nextView.Backup += server + ";"
         vs.nextView.Backup += server
@@ -126,11 +127,12 @@ func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
 func (vs *ViewServer) tick() {
 
   // Your code here.
-  for server, last := range vs.servers {  
-      if time.Now().Sub(last) > DeadPings * PingInterval {
+  for server, last := range vs.servers {      
+      if (time.Now().Sub(last)) > DeadPings * PingInterval {
         //server dead
         if server == vs.currentView.Primary {
-          fmt.Printf("[Info] primary %s dead ...\n", server)
+          fmt.Printf("[Info] primary %s dead , out of touch %d, dead interval is %d ...\n", server, time.Now().Sub(last), DeadPings * PingInterval)
+          delete(vs.servers, server)
           vs.currentView.Primary = vs.currentView.Backup
           vs.currentView.Backup = ""
           vs.currentView.Viewnum ++
