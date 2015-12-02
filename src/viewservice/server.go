@@ -19,7 +19,7 @@ type ViewServer struct {
   currentView *View //already acked
   nextView *View //prepared acked
   ack bool // currentView is acked
-  backups map[string]bool
+  servers map[string]time.Time
 }
 
 func MakeView(Viewnum uint, Primary string, Backup string) *View {
@@ -46,22 +46,26 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
     vs.currentView = MakeView(1, server, "")
     vs.nextView = MakeView(1, server, "")
 
-    vs.backups = make(map[string]bool)
+    vs.servers = make(map[string]time.Time)
+    vs.servers[server] = time.Now()
     vs.ack = false
     reply.View = *(vs.currentView)
     fmt.Printf("[Info] First primary %s in , view number %d ...\n", reply.View.Primary, reply.View.Viewnum)
     
   } else {
     //primary server already elected
+    
+
     if num == 0 {
       //new server in or old server crashed, do the same thing
       reply.View = *(vs.currentView)
 
-      _, ok := vs.backups[server]
+      _, ok := vs.servers[server]
       if !ok {
         // vs.nextView.Backup += server + ";"
         vs.nextView.Backup += server
-        vs.backups[server] = true
+        vs.servers[server] = time.Now()
+
         vs.ack = false
         vs.nextView.Viewnum ++
         fmt.Printf("[Info] %s become backup, primary is %s ...\n", server, vs.currentView.Primary)
@@ -70,6 +74,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
       
     } else {
       //exist server Ping
+      vs.servers[server] = time.Now()
 
       if (server == vs.currentView.Primary) {
         if num == vs.currentView.Viewnum && !vs.ack{
@@ -121,6 +126,21 @@ func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
 func (vs *ViewServer) tick() {
 
   // Your code here.
+  for server, last := range vs.servers {  
+      if time.Now().Sub(last) > DeadPings * PingInterval {
+        //server dead
+        if server == vs.currentView.Primary {
+          fmt.Printf("[Info] primary %s dead ...\n", server)
+          vs.currentView.Primary = vs.currentView.Backup
+          vs.currentView.Backup = ""
+          vs.currentView.Viewnum ++
+
+          *(vs.nextView) = *(vs.currentView)
+        } else {
+
+        }
+      }
+  }  
 }
 
 //
