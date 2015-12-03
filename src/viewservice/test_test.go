@@ -51,7 +51,7 @@ func Test1(t *testing.T) {
   }
 
   // very first primary
-  fmt.Printf("Test: First primary ...\n")
+  fmt.Printf("1 Test: First primary ...\n")
   fmt.Printf("[Info] first server %s ...\n", ck1.me)
   for i := 0; i < DeadPings * 2; i++ {
     view, _ := ck1.Ping(0)
@@ -66,7 +66,7 @@ func Test1(t *testing.T) {
   fmt.Printf("  ... Passed\n")
 
   // very first backup
-  fmt.Printf("Test: First backup ...\n")
+  fmt.Printf("2 Test: First backup ...\n")
 
   {
     vx, _ := ck1.Get()
@@ -84,7 +84,7 @@ func Test1(t *testing.T) {
   fmt.Printf("  ... Passed\n")
 
   // primary dies, backup should take over
-  fmt.Printf("Test: Backup takes over if primary fails ...\n")
+  fmt.Printf("3 Test: Backup takes over if primary fails ...\n")
 
   {
     ck1.Ping(2)
@@ -101,7 +101,7 @@ func Test1(t *testing.T) {
   fmt.Printf("  ... Passed\n")
 
   // revive ck1, should become backup
-  fmt.Printf("Test: Restarted server becomes backup ...\n")
+  fmt.Printf("4 Test: Restarted server becomes backup ...\n")
 
   {
     vx, _ := ck2.Get()
@@ -120,7 +120,7 @@ func Test1(t *testing.T) {
 
   // start ck3, kill the primary (ck2), the previous backup (ck1)
   // should become the server, and ck3 the backup
-  fmt.Printf("Test: Idle third server becomes backup if primary fails ...\n")
+  fmt.Printf("5 Test: Idle third server becomes backup if primary fails ...\n")
 
   {
     vx, _ := ck2.Get()
@@ -140,7 +140,7 @@ func Test1(t *testing.T) {
 
   // kill and immediately restart the primary -- does viewservice
   // conclude primary is down even though it's pinging?
-  fmt.Printf("Test: Restarted primary treated as dead ...\n")
+  fmt.Printf("6 Test: Restarted primary treated as dead ...\n")
 
   {
     vx, _ := ck1.Get()
@@ -178,7 +178,7 @@ func Test1(t *testing.T) {
 
   // does viewserver wait for ack of previous view before
   // starting the next one?
-  fmt.Printf("Test: Viewserver waits for primary to ack view ...\n")
+  fmt.Printf("7 Test: Viewserver waits for primary to ack view ...\n")
   
   {
     // set up p=ck3 b=ck1, but
@@ -186,6 +186,7 @@ func Test1(t *testing.T) {
     vx, _ := ck1.Get()
     for i := 0; i < DeadPings * 3; i++ {
       ck1.Ping(0)
+      fmt.Printf("[Info] server %s ping view num %d ...\n", ck3.me, vx.Viewnum)
       ck3.Ping(vx.Viewnum)
       v, _ := ck1.Get()
       if v.Viewnum > vx.Viewnum {
@@ -194,6 +195,8 @@ func Test1(t *testing.T) {
       time.Sleep(PingInterval)
     }
     check(t, ck1, ck3.me, ck1.me, vx.Viewnum+1)
+
+    fmt.Printf("[Info] pass part test 7 ...\n")
     vy, _ := ck1.Get()
     // ck3 is the primary, but it never acked.
     // let ck3 die. check that ck1 is not promoted.
@@ -210,7 +213,7 @@ func Test1(t *testing.T) {
 
   // if old servers die, check that a new (uninitialized) server
   // cannot take over.
-  fmt.Printf("Test: Uninitialized server can't become primary ...\n")
+  fmt.Printf("8 Test: Uninitialized server can't become primary ...\n")
 
   {
     for i := 0; i < DeadPings * 2; i++ {
