@@ -18,9 +18,8 @@ type ViewServer struct {
   // Your declarations here.
   currentView *View //already acked
   nextView *View //prepared acked
-  // ack bool // currentView is acked
+  ack bool // currentView is acked
   servers map[string]time.Time
-  ack map[uint]bool // view acked
 }
 
 func MakeView(Viewnum uint, Primary string, Backup string) *View {
@@ -49,10 +48,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 
     vs.servers = make(map[string]time.Time)
     vs.servers[server] = time.Now()
-
-    vs.ack = make(map[uint]bool)
-    vs.ack[1] = false
-    // vs.ack = false
+    vs.ack = false
     reply.View = *(vs.currentView)
     fmt.Printf("[Info] First primary %s in , view number %d ...\n", reply.View.Primary, reply.View.Viewnum)
     
@@ -70,9 +66,8 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
         vs.nextView.Backup += server
         vs.servers[server] = time.Now()
 
-        // vs.ack = false
+        vs.ack = false
         vs.nextView.Viewnum ++
-        vs.ack[vs.nextView.Viewnum] = false
         fmt.Printf("[Info] %s become backup, primary is %s ...\n", server, vs.currentView.Primary)
       }
      
@@ -84,16 +79,14 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
       if (server == vs.currentView.Primary) {
         fmt.Printf("[Info] primary %s Ping , current view num %d ...\n", server, vs.currentView.Viewnum)
         
-        if num == vs.currentView.Viewnum && !vs.ack[vs.currentView.Viewnum]{
-          vs.ack[vs.currentView.Viewnum] = true
-
+        if num == vs.currentView.Viewnum && !vs.ack{
           *(vs.currentView) = *(vs.nextView)
           reply.View = *(vs.currentView)
 
-          // vs.ack = true
+          vs.ack = true
 
           fmt.Printf("[Info] change view, currentView num %d ...\n", vs.currentView.Viewnum)
-          fmt.Printf("[Info] ack view number %d, primary is %s, backup is %s ...\n", num, vs.currentView.Primary, vs.currentView.Backup)
+          fmt.Printf("[Info] ack view number %d, primary is %s, backup is %s ...\n", vs.currentView.Viewnum, vs.currentView.Primary, vs.currentView.Backup)
         } else {
           //do nothing
         }
@@ -138,8 +131,8 @@ func (vs *ViewServer) tick() {
 
   // Your code here.
   for server, last := range vs.servers {      
-      if (time.Now().Sub(last)) > DeadPings * PingInterval && vs.ack[vs.currentView.Viewnum]{
-        
+      if (time.Now().Sub(last)) > DeadPings * PingInterval && vs.ack{
+        vs.ack = false
         if server == vs.currentView.Primary {
           //server dead
 

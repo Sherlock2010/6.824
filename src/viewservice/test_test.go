@@ -186,7 +186,7 @@ func Test1(t *testing.T) {
     vx, _ := ck1.Get()
     for i := 0; i < DeadPings * 3; i++ {
       ck1.Ping(0)
-      fmt.Printf("[Info] server %s ping view num %d ...\n", ck3.me, vx.Viewnum)
+      // fmt.Printf("[Info] server %s ping view num %d ...\n", ck3.me, vx.Viewnum)
       ck3.Ping(vx.Viewnum)
       v, _ := ck1.Get()
       if v.Viewnum > vx.Viewnum {
@@ -196,7 +196,7 @@ func Test1(t *testing.T) {
     }
     check(t, ck1, ck3.me, ck1.me, vx.Viewnum+1)
 
-    fmt.Printf("[Info] pass part test 7 ...\n")
+    fmt.Printf("[Info] pass part test 7")
     vy, _ := ck1.Get()
     // ck3 is the primary, but it never acked.
     // let ck3 die. check that ck1 is not promoted.
