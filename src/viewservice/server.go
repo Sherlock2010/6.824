@@ -18,7 +18,11 @@ type ViewServer struct {
   // Your declarations here.
   currentView *View //already acked
   nextView *View //prepared acked
-  ack bool // currentView is acked
+  
+  currentAck bool
+  nextAck bool // currentView is acked
+  ack bool
+  isNew bool
   servers map[string]time.Time
 }
 
@@ -49,8 +53,9 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
     vs.servers = make(map[string]time.Time)
     vs.servers[server] = time.Now()
     vs.ack = false
+    vs.isNew = false
     reply.View = *(vs.currentView)
-    fmt.Printf("[Info] First primary %s in , view number %d ...\n", reply.View.Primary, reply.View.Viewnum)
+    // fmt.Printf("[Info] First primary %s in , view number %d ...\n", reply.View.Primary, reply.View.Viewnum)
     
   } else {
     //primary server already elected
@@ -67,8 +72,10 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
         vs.servers[server] = time.Now()
 
         vs.ack = false
+        vs.isNew = true
+
         vs.nextView.Viewnum ++
-        fmt.Printf("[Info] %s become backup, primary is %s ...\n", server, vs.currentView.Primary)
+        // fmt.Printf("[Info] %s become backup, primary is %s ...\n", server, vs.currentView.Primary)
       }
      
       
@@ -77,25 +84,32 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
       vs.servers[server] = time.Now()
 
       if (server == vs.currentView.Primary) {
-        fmt.Printf("[Info] primary %s Ping , current view num %d ...\n", server, vs.currentView.Viewnum)
+        // fmt.Printf("[Info] primary %s Ping , current view num %d ...\n", server, vs.currentView.Viewnum)
         
-        if num == vs.currentView.Viewnum && !vs.ack{
-          *(vs.currentView) = *(vs.nextView)
-          reply.View = *(vs.currentView)
-
+        if num == vs.currentView.Viewnum {
           vs.ack = true
+          if vs.isNew {
+            *(vs.currentView) = *(vs.nextView)
+            reply.View = *(vs.currentView)
 
-          fmt.Printf("[Info] change view, currentView num %d ...\n", vs.currentView.Viewnum)
-          fmt.Printf("[Info] ack view number %d, primary is %s, backup is %s ...\n", vs.currentView.Viewnum, vs.currentView.Primary, vs.currentView.Backup)
+            vs.ack = false
+            vs.isNew = false
+
+            // fmt.Printf("[Info] change view, currentView num %d, ack %t ...\n", vs.currentView.Viewnum, vs.ack)
+            // fmt.Printf("[Info] ack view number %d, primary is %s, backup is %s ...\n", vs.currentView.Viewnum, vs.currentView.Primary, vs.currentView.Backup)
+          } else {
+            // vs.ack = false
+          }
+          
         } else {
-          //do nothing
+          vs.ack = false
         }
         
       } else {
         //backup Ping, do nothing
         reply.View = *(vs.currentView)
         
-        fmt.Printf("[Info] backup %s Ping ...\n", server)
+        // fmt.Printf("[Info] backup %s Ping, view num %d ...\n", server, num)
       }
          
     }  
@@ -113,7 +127,7 @@ func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
   if vs.currentView != nil {
     reply.View = *(vs.currentView)
   } else {
-    fmt.Printf("[Error] Get view error\n")
+    // fmt.Printf("[Error] Get view error\n")
     view := MakeView(0, "", "")
     reply.View = *view
   }
@@ -136,7 +150,7 @@ func (vs *ViewServer) tick() {
         if server == vs.currentView.Primary {
           //server dead
 
-          fmt.Printf("[Info] primary %s dead , out of touch %d, dead interval is %d ...\n", server, time.Now().Sub(last), DeadPings * PingInterval)
+          // fmt.Printf("[Info] primary %s dead , out of touch %d, dead interval is %d ...\n", server, time.Now().Sub(last), DeadPings * PingInterval)
           delete(vs.servers, server)
           vs.currentView.Primary = vs.currentView.Backup
           vs.currentView.Backup = ""
@@ -146,7 +160,7 @@ func (vs *ViewServer) tick() {
         } else {
           //backup dead
 
-          fmt.Printf("[Info] backup %s dead , out of touch %d, dead interval is %d ...\n", server, time.Now().Sub(last), DeadPings * PingInterval)
+          // fmt.Printf("[Info] backup %s dead , out of touch %d, dead interval is %d ...\n", server, time.Now().Sub(last), DeadPings * PingInterval)
           delete(vs.servers, server)
           vs.currentView.Backup = ""
           vs.currentView.Viewnum ++

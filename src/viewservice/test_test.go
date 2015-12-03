@@ -52,7 +52,7 @@ func Test1(t *testing.T) {
 
   // very first primary
   fmt.Printf("1 Test: First primary ...\n")
-  fmt.Printf("[Info] first server %s ...\n", ck1.me)
+  // fmt.Printf("[Info] first server %s ...\n", ck1.me)
   for i := 0; i < DeadPings * 2; i++ {
     view, _ := ck1.Ping(0)
     // fmt.Printf("[Info] view.Primary %s ---> ck1.me %s\n", view.Primary, ck1.me)
@@ -74,7 +74,7 @@ func Test1(t *testing.T) {
       ck1.Ping(1)
       view, _ := ck2.Ping(0)
       if view.Backup == ck2.me {
-        fmt.Printf("[Info] view.Backup == ck2.me ...\n")
+        // fmt.Printf("[Info] view.Backup == ck2.me ...\n")
         break
       }
       time.Sleep(PingInterval)
@@ -87,7 +87,7 @@ func Test1(t *testing.T) {
   fmt.Printf("3 Test: Backup takes over if primary fails ...\n")
 
   {
-    ck1.Ping(2)
+    ck1.Ping(2) //ack
     vx, _ := ck2.Ping(2)
     for i := 0; i < DeadPings * 2; i++ {
       v, _ := ck2.Ping(vx.Viewnum)
@@ -196,7 +196,7 @@ func Test1(t *testing.T) {
     }
     check(t, ck1, ck3.me, ck1.me, vx.Viewnum+1)
 
-    fmt.Printf("[Info] pass part test 7")
+    // fmt.Printf("[Info] pass part test 7 ...\n")
     vy, _ := ck1.Get()
     // ck3 is the primary, but it never acked.
     // let ck3 die. check that ck1 is not promoted.
