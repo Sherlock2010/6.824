@@ -16,17 +16,14 @@ type ViewServer struct {
   me string
 
   // Your declarations here.
-  currentView *View //already acked
-  nextView *View //prepared acked
-  
-  currentAck bool
-  nextAck bool // currentView is acked
+  curView *View
+  idle string // idle server
+  first bool
   ack bool
-  isNew bool
   servers map[string]time.Time
 }
 
-func MakeView(Viewnum uint, Primary string, Backup string) *View {
+func MakeView(Viewnum uint, Primary string ,Backup string) *View {
   view := new(View)
 
   view.Viewnum = Viewnum
@@ -41,79 +38,47 @@ func MakeView(Viewnum uint, Primary string, Backup string) *View {
 //
 func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 
-  // Your code here.
   server := args.Me
   num := args.Viewnum
   
-  if vs.currentView == nil {
-    //first server in, init currentView and nextView
-    vs.currentView = MakeView(1, server, "")
-    vs.nextView = MakeView(1, server, "")
+  if vs.first {
+    // viewservice first starts, accept any server as the first primary
+    vs.curView.Primary = server
+    vs.curView.Viewnum = 1
 
-    vs.servers = make(map[string]time.Time)
-    vs.servers[server] = time.Now()
-    vs.ack = false
-    vs.isNew = false
-    reply.View = *(vs.currentView)
-    // fmt.Printf("[Info] First primary %s in , view number %d ...\n", reply.View.Primary, reply.View.Viewnum)
     
   } else {
-    //primary server already elected
-    
+    vs.servers[server] = time.Now()
+
     if num == 0 {
-      //new server in or old server crashed, do the same thing
-      reply.View = *(vs.currentView)
-
-      // _, ok := vs.servers[server]
-
-      if vs.nextView.Backup == "" {
-        // vs.nextView.Backup += server + ";"
-        vs.nextView.Backup += server
-        vs.servers[server] = time.Now()
-
-        vs.ack = false
-        vs.isNew = true
-
-        vs.nextView.Viewnum ++
-        // fmt.Printf("[Info] %s become backup, primary is %s ...\n", server, vs.currentView.Primary)
-      }
-     
-      
-    } else {
-      //exist server Ping
-      vs.servers[server] = time.Now()
-
-      if (server == vs.currentView.Primary) {
-        // fmt.Printf("[Info] primary %s Ping , current view num %d ...\n", server, vs.currentView.Viewnum)
-        
-        if num == vs.currentView.Viewnum {
-          vs.ack = true
-          if vs.isNew {
-            *(vs.currentView) = *(vs.nextView)
-            reply.View = *(vs.currentView)
-
-            vs.ack = false
-            vs.isNew = false
-
-            // fmt.Printf("[Info] change view, currentView num %d, ack %t ...\n", vs.currentView.Viewnum, vs.ack)
-            // fmt.Printf("[Info] ack view number %d, primary is %s, backup is %s ...\n", vs.currentView.Viewnum, vs.currentView.Primary, vs.currentView.Backup)
-          } else {
-            // vs.ack = false
-          }
-          
+      // new server or old server re-start  
+      if vs.curView.Backup == "" {
+        if vs.ack {
+          vs.curView.Backup = server
+          vs.curView.Viewnum ++
+          vs.ack = false
         } else {
+          vs.idle = server
+        }
+      } else {
+        // Backup not empty and receive idle server is impossible
+
+      }
+
+    } else {
+      if num == vs.curView.Viewnum {
+        vs.ack = true
+
+        if vs.idle != "" {
+          vs.curView.Backup = vs.idle
+          vs.curView.Viewnum ++
           vs.ack = false
         }
-        
-      } else {
-        //backup Ping, do nothing
-        reply.View = *(vs.currentView)
-        
-        // fmt.Printf("[Info] backup %s Ping, view num %d ...\n", server, num)
       }
-         
-    }  
+    }
+
   }
+  reply.View = *(vs.curView)
 
   return nil
 }
@@ -124,14 +89,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
 
   // Your code here.
-  if vs.currentView != nil {
-    reply.View = *(vs.currentView)
-  } else {
-    // fmt.Printf("[Error] Get view error\n")
-    view := MakeView(0, "", "")
-    reply.View = *view
-  }
-
+  reply.View = *(vs.curView)
   return nil
 }
 
@@ -144,31 +102,29 @@ func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
 func (vs *ViewServer) tick() {
 
   // Your code here.
-  for server, last := range vs.servers {      
-      if (time.Now().Sub(last)) > DeadPings * PingInterval && vs.ack{
-        vs.ack = false
-        if server == vs.currentView.Primary {
-          //server dead
+  for server, t := range vs.servers {
+    if time.Now().Sub(t) > DeadPings *PingInterval {
+      // server dead
+      if vs.ack {
+        // if curView acked
+        delete(vs.servers, server)
 
-          // fmt.Printf("[Info] primary %s dead , out of touch %d, dead interval is %d ...\n", server, time.Now().Sub(last), DeadPings * PingInterval)
-          delete(vs.servers, server)
-          vs.currentView.Primary = vs.currentView.Backup
-          vs.currentView.Backup = ""
-          vs.currentView.Viewnum ++
-
-          *(vs.nextView) = *(vs.currentView)
+        if server == vs.curView.Primary {
+          vs.curView.Primary = vs.curView.Backup
+          vs.curView.Backup = ""
+          vs.curView.Viewnum ++
+          vs.ack = false
         } else {
-          //backup dead
-
-          // fmt.Printf("[Info] backup %s dead , out of touch %d, dead interval is %d ...\n", server, time.Now().Sub(last), DeadPings * PingInterval)
-          delete(vs.servers, server)
-          vs.currentView.Backup = ""
-          vs.currentView.Viewnum ++
-
-          *(vs.nextView) = *(vs.currentView)
+          vs.curView.Backup = ""
+          vs.curView.Viewnum ++
+          vs.ack = false
         }
+      } else {
+        // if curView not acked, do nothing
       }
-  }  
+    }
+  }
+  
 }
 
 //
@@ -185,6 +141,11 @@ func StartServer(me string) *ViewServer {
   vs := new(ViewServer)
   vs.me = me
   // Your vs.* initializations here.
+  vs.curView = MakeView(0, "", "")
+  vs.first = true
+  vs.ack = false
+  vs.servers = make(map[string]time.Time)
+  vs.idle = ""
 
   // tell net/rpc about our RPC server and handlers.
   rpcs := rpc.NewServer()
