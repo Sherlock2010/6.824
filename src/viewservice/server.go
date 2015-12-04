@@ -46,7 +46,9 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
     vs.curView.Primary = server
     vs.curView.Viewnum = 1
 
-    
+    vs.first = false
+
+    // fmt.Printf("[INFO] server %s become primary ...\n", server)
   } else {
     vs.servers[server] = time.Now()
 
@@ -57,6 +59,8 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
           vs.curView.Backup = server
           vs.curView.Viewnum ++
           vs.ack = false
+
+          // fmt.Printf("[INFO] server %s become backup, primary is %s ...\n", server, vs.curView.Primary)
         } else {
           vs.idle = server
         }
