@@ -50,23 +50,50 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 
     // fmt.Printf("[INFO] server %s become primary ...\n", server)
   } else {
+    _, ok := vs.servers[server]
+    //update time
     vs.servers[server] = time.Now()
 
     if num == 0 {
       // new server or old server re-start  
-      if vs.curView.Backup == "" {
-        if vs.ack {
-          vs.curView.Backup = server
-          vs.curView.Viewnum ++
-          vs.ack = false
+      if ok {
+        //old server crashed, and in
+        if server == vs.curView.Primary {
+          if vs.ack {
+            vs.curView.Primary = vs.curView.Backup
+            vs.curView.Backup = ""
+            vs.curView.Viewnum ++
 
-          // fmt.Printf("[INFO] server %s become backup, primary is %s ...\n", server, vs.curView.Primary)
+            vs.ack = false
+          } else {
+
+          }
         } else {
-          vs.idle = server
+          if vs.ack {
+            vs.curView.Backup = ""
+            vs.curView.Viewnum ++
+
+            vs.ack = false
+          } else {
+
+          }
         }
       } else {
+        //new server in
+        if vs.curView.Backup == "" {
+          if vs.ack {
+            vs.curView.Backup = server
+            vs.curView.Viewnum ++
+            vs.ack = false
+
+            // fmt.Printf("[INFO] server %s become backup, primary is %s ...\n", server, vs.curView.Primary)
+          } else {
+            vs.idle = server
+          }
+        } else {
         // Backup not empty and receive idle server is impossible
 
+        }
       }
 
     } else {
