@@ -37,9 +37,10 @@ func MakeView(Viewnum uint, Primary string ,Backup string) *View {
 // server Ping RPC handler.
 //
 func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
-
   server := args.Me
   num := args.Viewnum
+
+  fmt.Printf("[INFO] server %s Ping ...\n", server)
   
   if vs.first {
     // viewservice first starts, accept any server as the first primary
@@ -48,14 +49,14 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 
     vs.first = false
 
-    // fmt.Printf("[INFO] server %s become primary ...\n", server)
+    fmt.Printf("[INFO] server %s become primary ...\n", server)
   } else {
     _, ok := vs.servers[server]
     //update time
     vs.servers[server] = time.Now()
 
     if num == 0 {
-      // new server or old server re-start  
+      // new server in or old server re-start  
       if ok {
         //old server crashed, and in
         if server == vs.curView.Primary {
@@ -65,6 +66,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
             vs.curView.Viewnum ++
 
             vs.ack = false
+            fmt.Printf("[Warning] 1 change ack to %t ...\n", vs.ack)
           } else {
 
           }
@@ -74,6 +76,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
             vs.curView.Viewnum ++
 
             vs.ack = false
+            fmt.Printf("[Warning] 2 change ack to %t ...\n", vs.ack)
           } else {
 
           }
@@ -85,25 +88,37 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
             vs.curView.Backup = server
             vs.curView.Viewnum ++
             vs.ack = false
+            fmt.Printf("[Warning] 3 change ack to %t ...\n", vs.ack)
 
-            // fmt.Printf("[INFO] server %s become backup, primary is %s ...\n", server, vs.curView.Primary)
+            fmt.Printf("[INFO] server %s become backup, primary is %s ...\n", server, vs.curView.Primary)
           } else {
             vs.idle = server
+            fmt.Printf("[INFO] server %s in idle ...\n", server)
           }
         } else {
         // Backup not empty and receive idle server is impossible
+          vs.idle = server
+          fmt.Printf("[INFO] server %s in idle ...\n", server)
 
         }
-      }
+      
 
     } else {
       if num == vs.curView.Viewnum {
-        vs.ack = true
 
-        if vs.idle != "" {
-          vs.curView.Backup = vs.idle
-          vs.curView.Viewnum ++
-          vs.ack = false
+        if server == vs.curView.Primary {
+          vs.ack = true
+          fmt.Printf("[INFO] primary %s ping, ack %t ...\n", server, vs.ack)
+          if vs.idle != "" {
+            vs.curView.Backup = vs.idle
+            vs.curView.Viewnum ++
+            vs.ack = false
+            fmt.Printf("[Warning] 4 change ack to %t ...\n", vs.ack)
+
+            vs.idle = ""
+
+            fmt.Printf("[INFO] server %s become backup, primary is %s ...\n", vs.curView.Backup, vs.curView.Primary)
+          }
         }
       }
     }
@@ -135,6 +150,7 @@ func (vs *ViewServer) tick() {
   // Your code here.
   for server, t := range vs.servers {
     if time.Now().Sub(t) > DeadPings *PingInterval {
+      fmt.Printf("[INFO] server %s dead, ack %t...\n", server, vs.ack)
       // server dead
       if vs.ack {
         // if curView acked
@@ -142,16 +158,22 @@ func (vs *ViewServer) tick() {
 
         if server == vs.curView.Primary {
           vs.curView.Primary = vs.curView.Backup
-          vs.curView.Backup = ""
+          vs.curView.Backup = vs.idle
           vs.curView.Viewnum ++
           vs.ack = false
+          vs.idle = ""
+          fmt.Printf("[Warning] 5 change ack to %t ...\n", vs.ack)
+          fmt.Printf("[INFO] server %s become primary ...\n", vs.curView.Primary)
         } else {
           vs.curView.Backup = ""
           vs.curView.Viewnum ++
           vs.ack = false
+          fmt.Printf("[Warning] 6 change ack to %t ...\n", vs.ack)
+          fmt.Printf("[INFO] backup %s dead ...\n", server)
         }
       } else {
         // if curView not acked, do nothing
+        fmt.Printf("[INFO] curView not acked, do nothing ...\n")
       }
     }
   }
