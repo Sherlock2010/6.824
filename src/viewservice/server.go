@@ -101,7 +101,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
           fmt.Printf("[INFO] server %s in idle ...\n", server)
 
         }
-      
+      }
 
     } else {
       if num == vs.curView.Viewnum {
