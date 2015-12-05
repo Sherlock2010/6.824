@@ -124,7 +124,7 @@ func Test1(t *testing.T) {
 
   {
     vx, _ := ck2.Get()
-    fmt.Printf("[INFO] curView primary %s, backup %s ...\n", vx.Primary, vx.Backup)
+   
     ck2.Ping(vx.Viewnum)
     for i := 0; i < DeadPings * 2; i++ {
       ck3.Ping(0)
