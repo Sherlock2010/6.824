@@ -32,22 +32,63 @@ type PBServer struct {
   done sync.WaitGroup
   finish chan interface{}
   // Your declarations here.
+  viewnum uint
+
+  db map[string]string
 }
 
 func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
-  // Your code here.
+  key := args.Key
+  value := args.Value
+  dohash := args.DoHash
+
+  if !dohash {
+    //Put
+    _, ok := pb.db[key]
+
+    if ok {
+      pb.db[key] = value
+      DPrintf("[INFO] Update key %s , value %s ...\n", key, value)
+    } else {
+      pb.db[key] = value
+      DPrintf("[INFO] Init key %s , value %s ...\n", key, value)
+    }
+
+    reply.Err = ""
+    reply.PreviousValue = ""
+
+    return nil
+
+  } else {
+
+  }
+  
+
   return nil
 }
 
 func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
-  // Your code here.
+  key := args.Key
+
+  value, ok := pb.db[key]
+  if ok {
+    reply.Value = value
+    reply.Err = ""
+  } else {
+    reply.Value = ""
+    reply.Err = ErrNoKey
+  }
+
   return nil
 }
 
 
 // ping the viewserver periodically.
 func (pb *PBServer) tick() {
-  // Your code here.
+
+  View, _ := pb.vs.Ping(pb.viewnum)
+
+  pb.viewnum = View.Viewnum
 }
 
 
@@ -65,6 +106,8 @@ func StartServer(vshost string, me string) *PBServer {
   pb.vs = viewservice.MakeClerk(me, vshost)
   pb.finish = make(chan interface{})
   // Your pb.* initializations here.
+  pb.viewnum = 0
+  pb.db = make(map[string]string)
 
   rpcs := rpc.NewServer()
   rpcs.Register(pb)

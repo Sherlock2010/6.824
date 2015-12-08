@@ -68,9 +68,26 @@ func call(srv string, rpcname string,
 //
 func (ck *Clerk) Get(key string) string {
 
-  // Your code here.
+  primary := ck.vs.Primary()
 
-  return "???"
+  args := &GetArgs{}
+
+  args.Key = key
+
+  var reply GetReply
+  
+  // send an RPC request, wait for the reply.
+  ok := call(primary, "PBServer.Get", args, &reply)
+  if ok == false {
+    DPrintf("[INFO] Get(%s) failed ...\n", key)
+    
+    return ""
+  }
+  // err := reply.Err
+  value := reply.Value
+
+  return value
+
 }
 
 //
@@ -79,8 +96,26 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
 
-  // Your code here.
-  return "???"
+  primary := ck.vs.Primary()
+  DPrintf("[INFO] K/V Primary %s ...\n", primary)
+  args := &PutArgs{}
+
+  args.Key = key
+  args.Value = value
+  args.DoHash = dohash
+
+  var reply PutReply
+  
+  // send an RPC request, wait for the reply.
+  ok := call(primary, "PBServer.Put", args, &reply)
+  if ok == false {
+    DPrintf("[INFO] Put(%s, %s) failed ...\n", key, value)
+    return ""
+  }
+  // err := reply.Err
+  previousValue := reply.PreviousValue
+
+  return previousValue  
 }
 
 func (ck *Clerk) Put(key string, value string) {
