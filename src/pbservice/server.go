@@ -33,6 +33,8 @@ type PBServer struct {
   finish chan interface{}
   // Your declarations here.
   viewnum uint
+  role string
+  backup string
 
   db map[string]string
 }
@@ -41,28 +43,71 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
   key := args.Key
   value := args.Value
   dohash := args.DoHash
+  tag := args.Tag
 
-  if !dohash {
-    //Put
-    _, ok := pb.db[key]
+  if tag == Update {
+    // Update
 
-    if ok {
-      pb.db[key] = value
-      DPrintf("[INFO] Update key %s , value %s ...\n", key, value)
-    } else {
-      pb.db[key] = value
-      DPrintf("[INFO] Init key %s , value %s ...\n", key, value)
+    if pb.backup != "" {
+      ok := call(pb.backup, "PBServer.Put", args, &reply)
+      if ok == false {
+        DPrintf("[INFO] Fail to call %s PBServer.Put ...\n", pb.backup)
+      }
+      
+    }
+    
+    if !dohash {
+      //Put
+      _, ok := pb.db[key]
+  
+      if ok {
+        pb.db[key] = value
+        
+      } else {
+        pb.db[key] = value
+        
+      } 
+      DPrintf("[INFO] Update server %s key %s , value %s ...\n", pb.me, key, value)
+      reply.Err = OK
+      reply.PreviousValue = ""
+  
+      return nil
+
+    } else{
+      // Put Hash
+
+    }
+  } else if tag == Init {
+    // Init
+    pb.db = args.DB
+    reply.Err = OK
+    DPrintf("[INFO] Primary %s init backup %s ...\n", pb.me, pb.backup)
+    
+  } else {
+    // Over
+    if !dohash {
+      //Put
+      _, ok := pb.db[key]
+  
+      if ok {
+        pb.db[key] = value
+
+      } else {
+        pb.db[key] = value
+        
+      }
+      DPrintf("[INFO] Update server %s key %s , value %s ...\n", pb.me, key, value)
+      reply.Err = OK
+      reply.PreviousValue = ""
+  
+      return nil
+
+    } else{
+      // Put Hash
+
     }
 
-    reply.Err = ""
-    reply.PreviousValue = ""
-
-    return nil
-
-  } else {
-
   }
-  
 
   return nil
 }
@@ -70,13 +115,20 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
 func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
   key := args.Key
 
-  value, ok := pb.db[key]
-  if ok {
-    reply.Value = value
-    reply.Err = ""
+  if pb.dead == false {
+    value, ok := pb.db[key]
+    if ok {
+      reply.Value = value
+      reply.Err = OK
+
+    } else {
+      reply.Value = ""
+      reply.Err = ErrNoKey
+
+    }
   } else {
-    reply.Value = ""
-    reply.Err = ErrNoKey
+    reply.Err = ErrWrongServer
+
   }
 
   return nil
@@ -87,14 +139,41 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 func (pb *PBServer) tick() {
 
   View, _ := pb.vs.Ping(pb.viewnum)
-
+  // DPrintf("[INFO] %s %s Ping, viewnum %d ...\n", pb.role, pb.me, pb.viewnum)
   pb.viewnum = View.Viewnum
+  // DPrintf("[INFO] View Primary %s, Backup %s ...\n", View.Primary, View.Backup)
+  if pb.me == View.Primary {
+    //server is primary
+    pb.role = Primary
+
+    if pb.backup != View.Backup {    
+      pb.backup = View.Backup
+      DPrintf("[INFO] Detect backup %s ...\n", pb.backup)
+      // Init
+      args := &PutArgs{}
+      args.DB = pb.db
+      args.Tag = Init
+      var reply PutReply
+
+      ok := call(pb.backup, "PBServer.Put", args, &reply)
+      if ok == false {
+        DPrintf("[INFO] Fail to call %s Put ...\n", pb.backup)
+      }
+      
+    }
+  } else {
+    //server is backup
+    pb.role = Backup
+    pb.backup = ""
+  }
+
 }
 
 
 // tell the server to shut itself down.
 // please do not change this function.
 func (pb *PBServer) kill() {
+  DPrintf("[INFO] kill %s ...\n", pb.me)
   pb.dead = true
   pb.l.Close()
 }
@@ -107,6 +186,7 @@ func StartServer(vshost string, me string) *PBServer {
   pb.finish = make(chan interface{})
   // Your pb.* initializations here.
   pb.viewnum = 0
+  pb.backup = ""
   pb.db = make(map[string]string)
 
   rpcs := rpc.NewServer()

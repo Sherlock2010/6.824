@@ -5,7 +5,7 @@ import "net/rpc"
 import "fmt"
 
 // You'll probably need to uncomment these:
-// import "time"
+import "time"
 // import "crypto/rand"
 // import "math/big"
 
@@ -69,23 +69,29 @@ func call(srv string, rpcname string,
 func (ck *Clerk) Get(key string) string {
 
   primary := ck.vs.Primary()
-
+  // fmt.Printf("[INFO] Get(%s) ...\n", key)
   args := &GetArgs{}
 
   args.Key = key
 
   var reply GetReply
-  
-  // send an RPC request, wait for the reply.
-  ok := call(primary, "PBServer.Get", args, &reply)
-  if ok == false {
-    DPrintf("[INFO] Get(%s) failed ...\n", key)
-    
-    return ""
-  }
-  // err := reply.Err
-  value := reply.Value
+  reply.Err = Nil
 
+  for ! (reply.Err == OK || reply.Err == ErrNoKey) {
+    // send an RPC request, wait for the reply.
+    DPrintf("[INFO] Get(%s) ...\n", key)
+    ok := call(primary, "PBServer.Get", args, &reply)
+    if ok == false {
+      DPrintf("[INFO] Get(%s) failed ...\n", key)
+ 
+    }
+    
+    time.Sleep(viewservice.GetInterval)
+    DPrintf("[INFO] Try Get(%s) again ...\n", key)
+  }
+  
+  value := reply.Value
+  DPrintf("[INFO] Get(%s) value(%s) ...\n", key, value)
   return value
 
 }
@@ -97,22 +103,23 @@ func (ck *Clerk) Get(key string) string {
 func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
 
   primary := ck.vs.Primary()
-  DPrintf("[INFO] K/V Primary %s ...\n", primary)
+
   args := &PutArgs{}
 
   args.Key = key
   args.Value = value
   args.DoHash = dohash
+  args.Tag = Update
 
   var reply PutReply
-  
+  reply.Err = Nil
+
   // send an RPC request, wait for the reply.
   ok := call(primary, "PBServer.Put", args, &reply)
   if ok == false {
     DPrintf("[INFO] Put(%s, %s) failed ...\n", key, value)
-    return ""
   }
-  // err := reply.Err
+
   previousValue := reply.PreviousValue
 
   return previousValue  

@@ -3,9 +3,20 @@ package pbservice
 import "hash/fnv"
 
 const (
+  // For Put/Get RPC
+  Nil = "Nil"
   OK = "OK"
   ErrNoKey = "ErrNoKey"
   ErrWrongServer = "ErrWrongServer"
+
+  Init = "Init"
+  Update = "Update"
+  Over = "Over"
+
+  // For PBServer Role
+  Primary = "Primary"
+  Backup = "Backup"
+
 )
 type Err string
 
@@ -14,7 +25,8 @@ type PutArgs struct {
   Value string
   DoHash bool // For PutHash
   // You'll have to add definitions here.
-
+  Tag string
+  DB map[string]string
   // Field names must start with capital letters,
   // otherwise RPC will break.
 }

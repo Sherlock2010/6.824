@@ -115,6 +115,8 @@ func TestBasicFail(t *testing.T) {
 
   fmt.Printf("  ... Passed\n")
 
+  time.Sleep(10 * viewservice.PingInterval)
+
   // kill solo server, start new server, check that
   // it does not start serving as primary
 
@@ -126,6 +128,8 @@ func TestBasicFail(t *testing.T) {
   get_done := false
   go func() {
     ck.Get("1")
+    // check(ck, "1", "v1a")
+    fmt.Printf("[Err] ck.Get() return ...\n")
     get_done = true
   }()
   time.Sleep(2 * time.Second)
