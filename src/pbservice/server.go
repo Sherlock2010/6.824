@@ -50,16 +50,18 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
   if tag == Update {
     // Update
 
-    if pb.backup != "" {
-      ok := call(pb.backup, "PBServer.Put", args, &reply)
-      if ok == false {
-        DPrintf("[INFO] Fail to call %s PBServer.Put ...\n", pb.backup)
-      }
-      
-    }
+    
     
     if !dohash {
       //Put
+      if pb.backup != "" {
+        ok := call(pb.backup, "PBServer.Put", args, &reply)
+        if ok == false {
+         DPrintf("[INFO] Fail to call %s PBServer.Put ...\n", pb.backup)
+        }
+      
+      }
+
       _, ok := pb.db[key]
   
       if ok {
@@ -79,6 +81,13 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
       // Put Hash
       if value != pb.commitValue {
         // not yet commit
+        if pb.backup != "" {
+          ok := call(pb.backup, "PBServer.Put", args, &reply)
+          if ok == false {
+           DPrintf("[INFO] Fail to call %s PBServer.Put ...\n", pb.backup)
+          }
+        }
+        
         previousValue, ok := pb.db[key]
         pb.previousValue = previousValue
         if ok == true {
