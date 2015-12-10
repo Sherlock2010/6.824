@@ -11,7 +11,7 @@ import "syscall"
 import "math/rand"
 import "sync"
 
-//import "strconv"
+import "strconv"
 
 // Debugging
 const Debug = 0
@@ -35,6 +35,8 @@ type PBServer struct {
   viewnum uint
   role string
   backup string
+  commitValue string
+  previousValue string
 
   db map[string]string
 }
@@ -75,6 +77,35 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
 
     } else{
       // Put Hash
+      if value != pb.commitValue {
+        // not yet commit
+        previousValue, ok := pb.db[key]
+        pb.previousValue = previousValue
+        if ok == true {
+          newValue := hash(previousValue + value)
+          pb.db[key] = strconv.Itoa(int(newValue))
+          pb.commitValue = value
+
+          reply.PreviousValue = previousValue
+          reply.Err = OK
+
+          DPrintf("[INFO] Update server %s (%s, %s) , value %d ...\n", pb.me, key, value, newValue)
+        } else {
+
+          newValue := hash("" + value)
+          pb.db[key] = strconv.Itoa(int(newValue))
+          pb.commitValue = value
+
+          reply.PreviousValue = ""
+          reply.Err = OK
+        
+          DPrintf("[INFO] Update server %s (%s, %s) , value %d ...\n", pb.me, key, value, newValue)
+        }
+      } else {
+        // already commit
+        reply.PreviousValue = pb.previousValue
+        reply.Err = OK
+      }
 
     }
   } else if tag == Init {
@@ -104,9 +135,33 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
 
     } else{
       // Put Hash
-
+      if value != pb.commitValue {
+        // not yet commit
+        previousValue, ok := pb.db[key]
+        pb.previousValue = previousValue
+        if ok == true {
+          newValue := hash(previousValue + value)
+          pb.db[key] = strconv.Itoa(int(newValue))
+          pb.commitValue = value
+  
+          reply.PreviousValue = previousValue
+          reply.Err = OK
+          DPrintf("[INFO] Update server %s key %s , value %d ...\n", pb.me, key, newValue)
+        } else {
+          newValue := hash("" + value)
+          pb.db[key] = strconv.Itoa(int(newValue))
+          pb.commitValue = value
+  
+          reply.PreviousValue = ""
+          reply.Err = OK
+          DPrintf("[INFO] Update server %s key %s , value %d ...\n", pb.me, key, newValue)
+        }
+      } else {
+        // already commit
+        reply.PreviousValue = pb.previousValue
+        reply.Err = OK
+      }
     }
-
   }
 
   return nil
@@ -187,6 +242,8 @@ func StartServer(vshost string, me string) *PBServer {
   // Your pb.* initializations here.
   pb.viewnum = 0
   pb.backup = ""
+  pb.commitValue = ""
+  pb.previousValue = ""
   pb.db = make(map[string]string)
 
   rpcs := rpc.NewServer()
@@ -208,9 +265,11 @@ func StartServer(vshost string, me string) *PBServer {
       if err == nil && pb.dead == false {
         if pb.unreliable && (rand.Int63() % 1000) < 100 {
           // discard the request.
+          // DPrintf("[Err] Discard the request ...\n")
           conn.Close()
         } else if pb.unreliable && (rand.Int63() % 1000) < 200 {
           // process the request but force discard of reply.
+          // DPrintf("[Err] Process the request but force discard of reply ...\n")
           c1 := conn.(*net.UnixConn)
           f, _ := c1.File()
           err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
@@ -223,6 +282,7 @@ func StartServer(vshost string, me string) *PBServer {
             pb.done.Done()
           }()
         } else {
+
           pb.done.Add(1)
           go func() {
             rpcs.ServeConn(conn)

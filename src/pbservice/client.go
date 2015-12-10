@@ -79,7 +79,7 @@ func (ck *Clerk) Get(key string) string {
 
   for ! (reply.Err == OK || reply.Err == ErrNoKey) {
     // send an RPC request, wait for the reply.
-    DPrintf("[INFO] Get(%s) ...\n", key)
+    // DPrintf("[INFO] Get(%s) ...\n", key)
     ok := call(primary, "PBServer.Get", args, &reply)
     if ok == false {
       DPrintf("[INFO] Get(%s) failed ...\n", key)
@@ -87,7 +87,7 @@ func (ck *Clerk) Get(key string) string {
     }
     
     time.Sleep(viewservice.GetInterval)
-    DPrintf("[INFO] Try Get(%s) again ...\n", key)
+    // DPrintf("[INFO] Try Get(%s) again ...\n", key)
   }
   
   value := reply.Value
@@ -114,12 +114,17 @@ func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
   var reply PutReply
   reply.Err = Nil
 
-  // send an RPC request, wait for the reply.
-  ok := call(primary, "PBServer.Put", args, &reply)
-  if ok == false {
-    DPrintf("[INFO] Put(%s, %s) failed ...\n", key, value)
-  }
+  for reply.Err != OK {
+    DPrintf("[INFO] Try Put(%s, %s) ...\n", key, value)
+    // send an RPC request, wait for the reply.
+    ok := call(primary, "PBServer.Put", args, &reply)
+    if ok == false {
+      DPrintf("[INFO] Put(%s, %s) failed ...\n", key, value)
+    }
 
+    time.Sleep(viewservice.PutInterval)
+  }
+  DPrintf("[INFO] Put(%s, %s) succeed ...\n", key, value)
   previousValue := reply.PreviousValue
 
   return previousValue  
