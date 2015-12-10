@@ -82,7 +82,7 @@ func (ck *Clerk) Get(key string) string {
     // DPrintf("[INFO] Get(%s) ...\n", key)
     ok := call(primary, "PBServer.Get", args, &reply)
     if ok == false {
-      DPrintf("[INFO] Get(%s) failed ...\n", key)
+      // DPrintf("[INFO] Get(%s) failed ...\n", key)
  
     }
     

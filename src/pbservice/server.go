@@ -112,7 +112,6 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
     // Init
     pb.db = args.DB
     reply.Err = OK
-    DPrintf("[INFO] Primary %s init backup %s ...\n", pb.me, pb.backup)
     
   } else {
     // Over

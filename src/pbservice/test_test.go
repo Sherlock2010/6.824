@@ -179,7 +179,7 @@ func TestAtMostOnce(t *testing.T) {
   ck := MakeClerk(vshost, "")
   k := "counter"
   val := ""
-  for i := 0; i < 100; i++ {
+  for i := 0; i < 10; i++ {
     v := strconv.Itoa(i)
     pv := ck.PutHash(k, v)
     if pv != val {
