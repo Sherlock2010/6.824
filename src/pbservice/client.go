@@ -82,8 +82,8 @@ func (ck *Clerk) Get(key string) string {
     // DPrintf("[INFO] Get(%s) ...\n", key)
     ok := call(primary, "PBServer.Get", args, &reply)
     if ok == false {
+      primary = ck.vs.Primary()
       // DPrintf("[INFO] Get(%s) failed ...\n", key)
- 
     }
     
     time.Sleep(viewservice.GetInterval)
@@ -119,6 +119,7 @@ func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
     // send an RPC request, wait for the reply.
     ok := call(primary, "PBServer.Put", args, &reply)
     if ok == false {
+      primary = ck.vs.Primary()
       DPrintf("[INFO] Put(%s, %s) failed ...\n", key, value)
     }
 
