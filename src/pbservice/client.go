@@ -49,12 +49,12 @@ func call(srv string, rpcname string,
     return false
   }
   defer c.Close()
-    
+  
   err := c.Call(rpcname, args, reply)
   if err == nil {
     return true
   }
-
+  
   fmt.Println(err)
   return false
 }
@@ -115,17 +115,17 @@ func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
   reply.Err = Nil
 
   for reply.Err != OK {
-    DPrintf("[INFO] Try Put(%s, %s) ...\n", key, value)
+
     // send an RPC request, wait for the reply.
     ok := call(primary, "PBServer.Put", args, &reply)
     if ok == false {
       primary = ck.vs.Primary()
-      DPrintf("[INFO] Put(%s, %s) failed ...\n", key, value)
+      DPrintf("[INFO] Put(%s, %s) to Primary %s failed ...\n", key, value, primary)
     }
-
+    
     time.Sleep(viewservice.PutInterval)
   }
-  DPrintf("[INFO] Put(%s, %s) succeed ...\n", key, value)
+  DPrintf("[INFO] Put(%s, %s) to Primary %s succeed, reply %s ...\n", key, value, primary, reply.PreviousValue)
   previousValue := reply.PreviousValue
 
   return previousValue  

@@ -37,6 +37,8 @@ type PBServer struct {
   backup string
   commitValue string
   previousValue string
+  init bool
+  commit sync.WaitGroup
 
   db map[string]string
 }
@@ -50,16 +52,22 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
   if tag == Update {
     // Update
 
-    
-    
     if !dohash {
       //Put
       if pb.backup != "" {
-        ok := call(pb.backup, "PBServer.Put", args, &reply)
-        if ok == false {
-         DPrintf("[INFO] Fail to call %s PBServer.Put ...\n", pb.backup)
+        var putReply PutReply
+        putReply.Err = Nil
+
+        for putReply.Err != OK {
+          
+          ok := call(pb.backup, "PBServer.Put", args, &putReply)
+          if ok == false {
+            // DPrintf("[Err] Fail to call %s PBServer.Put, Tag %s ...\n", pb.backup, tag)
+          }
+
+          time.Sleep(viewservice.PutInterval)
         }
-      
+
       }
 
       _, ok := pb.db[key]
@@ -71,7 +79,7 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
         pb.db[key] = value
         
       } 
-      DPrintf("[INFO] Update server %s key %s , value %s ...\n", pb.me, key, value)
+      // fmt.Printf("[INFO] Update server %s key %s , value %s ...\n", pb.me, key, value)
       reply.Err = OK
       reply.PreviousValue = ""
   
@@ -79,39 +87,59 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
 
     } else{
       // Put Hash
+      // fmt.Printf("[INFO] Try Put(%s, %s) To %s ...\n", key, value, pb.me)
+      pb.commit.Wait()
+
       if value != pb.commitValue {
+        pb.commit.Add(1)
+        // DPrintf("[INFO] %s, value %s != commit value %s ...\n", pb.me, value, pb.commitValue)
         // not yet commit
+        var putReply PutReply
+        putReply.Err = Nil
+
         if pb.backup != "" {
-          ok := call(pb.backup, "PBServer.Put", args, &reply)
-          if ok == false {
-           DPrintf("[INFO] Fail to call %s PBServer.Put ...\n", pb.backup)
+          for putReply.Err != OK {
+            // DPrintf("[INFO] Try PutHash(%s, %s) To %s...\n", key, value, pb.backup)
+            ok := call(pb.backup, "PBServer.Put", args, &putReply)
+            if ok == false {
+              // DPrintf("[Err] Fail to call %s PBServer.Put, Tag %s ...\n", pb.backup, tag)
+            }
           }
+
+          time.Sleep(viewservice.PutInterval)
         }
         
         previousValue, ok := pb.db[key]
-        pb.previousValue = previousValue
+        
         if ok == true {
           newValue := hash(previousValue + value)
           pb.db[key] = strconv.Itoa(int(newValue))
+          // fmt.Printf("[INFO] %s Change1 commit value %s -> %s ...\n", pb.me, pb.commitValue, value)
           pb.commitValue = value
+          pb.previousValue = previousValue
 
           reply.PreviousValue = previousValue
           reply.Err = OK
 
-          DPrintf("[INFO] Update server %s (%s, %s) , value %d ...\n", pb.me, key, value, newValue)
+          DPrintf("[INFO] Update server %s (%s, %s) ,return value %s, commit value %s, new value %s ...\n", pb.me, key, value, reply.PreviousValue, pb.commitValue, pb.db[key])
         } else {
 
           newValue := hash("" + value)
           pb.db[key] = strconv.Itoa(int(newValue))
+          // fmt.Printf("[INFO] %s Change2 commit value %s -> %s ...\n", pb.me, pb.commitValue, value)
           pb.commitValue = value
+          pb.previousValue = ""
 
           reply.PreviousValue = ""
           reply.Err = OK
         
-          DPrintf("[INFO] Update server %s (%s, %s) , value %d ...\n", pb.me, key, value, newValue)
+          DPrintf("[INFO] Update server %s (%s, %s) ,return value %s, commit value %s, new value %s ...\n", pb.me, key, value, reply.PreviousValue, pb.commitValue, pb.db[key])
         }
+
+        pb.commit.Done()
       } else {
         // already commit
+        // DPrintf("[INFO] (%s, %s) already commit, return %s ...\n", key, value, pb.previousValue)
         reply.PreviousValue = pb.previousValue
         reply.Err = OK
       }
@@ -119,8 +147,13 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
     }
   } else if tag == Init {
     // Init
-    pb.db = args.DB
-    reply.Err = OK
+    if pb.init == false {
+      pb.db = args.DB
+      reply.Err = OK
+    } else {
+      reply.Err = OK
+    }
+    
     
   } else {
     // Over
@@ -143,14 +176,19 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
 
     } else{
       // Put Hash
+      DPrintf("[INFO] Try Put(%s, %s) To %s ...\n", key, value, pb.me)
+      pb.commit.Wait()
       if value != pb.commitValue {
+        pb.commit.Add(1)
+        // DPrintf("[INFO] %s value %s != commit value %s ...\n", pb.me, value, pb.commitValue)
         // not yet commit
         previousValue, ok := pb.db[key]
-        pb.previousValue = previousValue
+        
         if ok == true {
           newValue := hash(previousValue + value)
           pb.db[key] = strconv.Itoa(int(newValue))
           pb.commitValue = value
+          pb.previousValue = previousValue
   
           reply.PreviousValue = previousValue
           reply.Err = OK
@@ -159,13 +197,17 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
           newValue := hash("" + value)
           pb.db[key] = strconv.Itoa(int(newValue))
           pb.commitValue = value
+          pb.previousValue = ""
   
           reply.PreviousValue = ""
           reply.Err = OK
           DPrintf("[INFO] Update server %s key %s , value %d ...\n", pb.me, key, newValue)
         }
-      } else {
+
+        pb.commit.Done()
+      } else {  
         // already commit
+        // DPrintf("[INFO] (%s, %s) already commit, return %s ...\n", key, value, pb.previousValue)
         reply.PreviousValue = pb.previousValue
         reply.Err = OK
       }
@@ -211,25 +253,34 @@ func (pb *PBServer) tick() {
 
     if pb.backup != View.Backup {    
       pb.backup = View.Backup
-      DPrintf("[INFO] Detect backup %s ...\n", pb.backup)
-      // Init
-      args := &PutArgs{}
-      args.DB = pb.db
-      args.Tag = Init
-      var reply PutReply
 
-      ok := call(pb.backup, "PBServer.Put", args, &reply)
-      if ok == false {
-        DPrintf("[INFO] Fail to call %s Put ...\n", pb.backup)
+      if pb.backup != "" {
+         // Init Backup
+
+         args := &PutArgs{}
+         args.DB = pb.db
+         args.Tag = Init
+         var reply PutReply
+         reply.Err = Nil
+   
+         for reply.Err != OK {
+           ok := call(pb.backup, "PBServer.Put", args, &reply)
+           if ok == false {
+             DPrintf("[INFO] Fail to call %s Put ...\n", pb.backup)
+           }
+   
+           time.Sleep(viewservice.PutInterval)
+         }
+         
+      } else {
+         //do nothing 
       }
-      
     }
   } else {
     //server is backup
     pb.role = Backup
     pb.backup = ""
   }
-
 }
 
 
@@ -253,6 +304,7 @@ func StartServer(vshost string, me string) *PBServer {
   pb.commitValue = ""
   pb.previousValue = ""
   pb.db = make(map[string]string)
+  pb.init = false
 
   rpcs := rpc.NewServer()
   rpcs.Register(pb)
@@ -273,11 +325,11 @@ func StartServer(vshost string, me string) *PBServer {
       if err == nil && pb.dead == false {
         if pb.unreliable && (rand.Int63() % 1000) < 100 {
           // discard the request.
-          // DPrintf("[Err] Discard the request ...\n")
+          DPrintf("[Err] %s Discard the request ...\n", pb.me)
           conn.Close()
         } else if pb.unreliable && (rand.Int63() % 1000) < 200 {
           // process the request but force discard of reply.
-          // DPrintf("[Err] Process the request but force discard of reply ...\n")
+          DPrintf("[Err] %s Process the request but force discard of reply ...\n", pb.me)
           c1 := conn.(*net.UnixConn)
           f, _ := c1.File()
           err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
@@ -290,7 +342,7 @@ func StartServer(vshost string, me string) *PBServer {
             pb.done.Done()
           }()
         } else {
-
+          // DPrintf("[Err] %s Normal ...\n", pb.me)
           pb.done.Add(1)
           go func() {
             rpcs.ServeConn(conn)
@@ -320,6 +372,6 @@ func StartServer(vshost string, me string) *PBServer {
     }
     pb.done.Done()
   }()
-
+  DPrintf("[INFO] Start Server %s ...\n", pb.me)
   return pb
 }
