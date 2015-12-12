@@ -53,10 +53,10 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
   } else {
     //update time
     vs.servers[server] = time.Now()
-
+    // fmt.Printf("[INFO] Cur View Primary %s, Backup %s ...\n", vs.curView.Primary, vs.curView.Backup)
     if num == 0 {
       // new server in or old server re-start  
-      //old server crashed, and in
+      // old server crashed, and in
       if server == vs.curView.Primary {
         if vs.ack {
           vs.curView.Primary = vs.curView.Backup
@@ -70,7 +70,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
         }
       } else if server == vs.curView.Backup{
         if vs.ack {
-          vs.curView.Backup = ""
+          // vs.curView.Backup = ""
           vs.curView.Viewnum ++
 
           vs.ack = false
@@ -106,7 +106,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
         if server == vs.curView.Primary {
           vs.ack = true
           // fmt.Printf("[INFO] primary %s ping, ack %t ...\n", server, vs.ack)
-          if vs.idle != "" {
+          if (vs.curView.Backup == "") && (vs.idle != "") {
             vs.curView.Backup = vs.idle
             vs.curView.Viewnum ++
             vs.ack = false
@@ -146,26 +146,27 @@ func (vs *ViewServer) tick() {
   // Your code here.
   for server, t := range vs.servers {
     if time.Now().Sub(t) > DeadPings *PingInterval {
-      // fmt.Printf("[INFO] server %s dead, ack %t...\n", server, vs.ack)
+      
       // server dead
       if vs.ack {
         // if curView acked
         delete(vs.servers, server)
 
         if server == vs.curView.Primary {
+          // fmt.Printf("[INFO] Primary %s dead, Viewnum %d ...\n", server, vs.curView.Viewnum)
           vs.curView.Primary = vs.curView.Backup
           vs.curView.Backup = vs.idle
           vs.curView.Viewnum ++
           vs.ack = false
           vs.idle = ""
           
-          // fmt.Printf("[INFO] server %s become primary ...\n", vs.curView.Primary)
+          // fmt.Printf("[INFO] server %s become primary, Viewnum %d ...\n", vs.curView.Primary, vs.curView.Viewnum)
         } else {
           vs.curView.Backup = ""
           vs.curView.Viewnum ++
           vs.ack = false
           
-          // fmt.Printf("[INFO] backup %s dead ...\n", server)
+          // fmt.Printf("[INFO] Backup %s dead ...\n", server)
         }
       } else {
         // if curView not acked, do nothing

@@ -42,6 +42,8 @@ type View struct {
 // clients should send a Ping RPC this often,
 // to tell the viewservice that the client is alive.
 const PingInterval = time.Millisecond * 100
+const GetInterval = time.Millisecond * 100
+const PutInterval = time.Millisecond * 100
 
 // the viewserver will declare a client dead if it misses
 // this many Ping RPCs in a row.
