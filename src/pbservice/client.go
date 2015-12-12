@@ -69,20 +69,24 @@ func call(srv string, rpcname string,
 func (ck *Clerk) Get(key string) string {
 
   primary := ck.vs.Primary()
-  // fmt.Printf("[INFO] Get(%s) ...\n", key)
+  
   args := &GetArgs{}
 
   args.Key = key
 
   var reply GetReply
   reply.Err = Nil
-
+  DPrintf("[INFO] Send Get(%s) To Primary %s ...\n", key, primary)
+  ok := call(primary, "PBServer.Get", args, &reply)
+  if ok == false {
+    // DPrintf("[INFO] Get(%s) failed ...\n", key)
+  }
   for ! (reply.Err == OK || reply.Err == ErrNoKey) {
     // send an RPC request, wait for the reply.
-    // DPrintf("[INFO] Get(%s) ...\n", key)
+    primary = ck.vs.Primary()
+    DPrintf("[INFO] Send Get(%s) To Primary %s ...\n", key, primary)
     ok := call(primary, "PBServer.Get", args, &reply)
     if ok == false {
-      primary = ck.vs.Primary()
       // DPrintf("[INFO] Get(%s) failed ...\n", key)
     }
     
@@ -91,7 +95,7 @@ func (ck *Clerk) Get(key string) string {
   }
   
   value := reply.Value
-  DPrintf("[INFO] Get(%s) value(%s) ...\n", key, value)
+  DPrintf("[INFO] Get(%s) value(%s) from %s ...\n", key, value, primary)
   return value
 
 }

@@ -55,12 +55,19 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
     if !dohash {
       //Put
       if pb.backup != "" {
+        putArgs := &PutArgs{}
+
+        putArgs.Key = args.Key
+        putArgs.Value = args.Value
+        putArgs.DoHash = args.DoHash
+        putArgs.Tag = Over
+
         var putReply PutReply
         putReply.Err = Nil
 
         for putReply.Err != OK {
           
-          ok := call(pb.backup, "PBServer.Put", args, &putReply)
+          ok := call(pb.backup, "PBServer.Put", putArgs, &putReply)
           if ok == false {
             // DPrintf("[Err] Fail to call %s PBServer.Put, Tag %s ...\n", pb.backup, tag)
           }
@@ -79,7 +86,7 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
         pb.db[key] = value
         
       } 
-      // fmt.Printf("[INFO] Update server %s key %s , value %s ...\n", pb.me, key, value)
+      DPrintf("[INFO] Update server %s key %s , value %s ...\n", pb.me, key, value)
       reply.Err = OK
       reply.PreviousValue = ""
   
@@ -168,7 +175,7 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
         pb.db[key] = value
         
       }
-      DPrintf("[INFO] Update server %s key %s , value %s ...\n", pb.me, key, value)
+      DPrintf("[INFO] Update server %s key %s , value %s ...\n", pb.me, key, pb.db[key])
       reply.Err = OK
       reply.PreviousValue = ""
   
@@ -220,21 +227,42 @@ func (pb *PBServer) Put(args *PutArgs, reply *PutReply) error {
 func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
   key := args.Key
 
-  if pb.dead == false {
+  reply.Viewnum = pb.viewnum
+
+  if pb.dead == false && pb.role == Primary {
+    var getReply GetReply
+    DPrintf("[INFO] %s backup is %s ...\n", pb.me, pb.backup)
+    if pb.backup != "" {
+      DPrintf("[INFO] %s Send Request Get To Backup %s ...\n", pb.me, pb.backup)
+      ok := call(pb.backup, "PBServer.Get", args, &getReply)
+      if ok == false {
+        DPrintf("[INFO] Call %s Get Fail ...\n", pb.backup)
+      }
+
+      DPrintf("[INFO] getReply.Viewnum %d, pb.viewnum %d ...\n", getReply.Viewnum, pb.viewnum)
+      if getReply.Viewnum > pb.viewnum {
+        reply.Err = ErrWrongServer
+        return nil
+      }
+    }
+    
     value, ok := pb.db[key]
     if ok {
       reply.Value = value
+      reply.Viewnum = pb.viewnum
       reply.Err = OK
-
     } else {
       reply.Value = ""
+      reply.Viewnum = pb.viewnum
       reply.Err = ErrNoKey
-
     }
+   
+
   } else {
     reply.Err = ErrWrongServer
 
   }
+  DPrintf("[INFO] %s Get Reply Value %s ...\n", pb.me, reply.Value)
 
   return nil
 }

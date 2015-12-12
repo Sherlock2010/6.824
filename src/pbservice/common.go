@@ -39,11 +39,13 @@ type PutReply struct {
 type GetArgs struct {
   Key string
   // You'll have to add definitions here.
+
 }
 
 type GetReply struct {
   Err Err
   Value string
+  Viewnum uint
 }
 
 
