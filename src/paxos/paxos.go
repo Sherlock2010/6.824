@@ -30,7 +30,7 @@ import "fmt"
 import "math/rand"
 
 // Debugging
-const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -57,6 +57,7 @@ type Paxos struct {
   AccDone sync.WaitGroup
 
   insMap map[int]*Instance
+  okMap map[int]bool
 }
 
 //
@@ -106,15 +107,18 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 //
 func (px *Paxos) Start(seq int, v interface{}) {
   // Your code here.
-  ins := &Instance{}
-  ins.Seq = seq
-  ins.V = v
-  ins.Count = 0
-  ins.OK = false
-  
+
   _, ok := px.insMap[seq] 
+
   if ok == false {
+    ins := &Instance{}
+    ins.Seq = seq
+    ins.V = v
+    ins.Count = 0
+    ins.OK = false
+
     px.insMap[seq] = ins
+    px.okMap[seq] = false
 
     npaxos := len(px.peers)
     px.preDone.Add(npaxos)
@@ -185,28 +189,40 @@ func (px *Paxos) Accept(seq int) error{
 // 
 func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
   px.mu.Lock()
-
   seq := args.Seq
   v := args.V
 
-  if seq > px.maxpre {
-    px.maxpre = seq
+  _, ok := px.insMap[seq] 
+  
+  if ok == false {
+    ins := &Instance{}
+    ins.Seq = seq
+    ins.V = v
+    ins.Count = 0
+    ins.OK = false
 
-    // accept
-    reply.OK = true
-    reply.Seq = px.maxpre // maybe wrong ?
-
-    if px.maxapt == -1 {
-      //init peer
-      reply.V = v
+    px.insMap[seq] = ins
+    px.okMap[seq] = false
+  
+    if seq > px.maxpre {
+      px.maxpre = seq
+  
+      // accept
+      reply.OK = true
+      reply.Seq = px.maxpre // maybe wrong ?
+  
+      if px.maxapt == -1 {
+        //init peer
+        reply.V = v
+      } else {
+        reply.V = px.v
+      }
+      
     } else {
-      reply.V = px.v
+      // reject
+      reply.OK = false
+  
     }
-    
-  } else {
-    // reject
-    reply.OK = false
-
   }
   
   DPrintf("[INFO] %d Reply V %s ...\n", px.me, reply.V)
@@ -220,13 +236,14 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
 func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
   seq := args.Seq
   v := args.V
-
+  DPrintf("[INFO] %d Accept seq = %d px.maxpre = %d ...\n", px.me, seq, px.maxpre)
   if seq >= px.maxpre {
     px.maxpre = seq
     px.maxapt = seq
     px.v = v
     reply.OK = true
-    px.insMap[seq].OK = true
+    px.okMap[seq] = true
+    DPrintf("[INFO] %d okMap %d = %t ...\n", px.me, seq, px.okMap[seq])
   } else {
     reply.OK = false
   }
@@ -325,10 +342,11 @@ func (px *Paxos) Status(seq int) (bool, interface{}) {
   
   ins, ok := px.insMap[seq]
 
-  if ok == true && ins.OK == true{
+  if ok == true {
 
-    return true, ins.V
+    return px.okMap[seq], ins.V
   } else {
+    DPrintf("[INFO] %d No seq %d ...\n", px.me, seq)
     return false, nil
   }
 
@@ -362,6 +380,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
   px.maxpre = -1
   px.maxapt = -1
   px.insMap = make(map[int]*Instance)
+  px.okMap = make(map[int]bool)
   
 
   if rpcs != nil {
