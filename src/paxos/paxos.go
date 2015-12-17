@@ -29,6 +29,15 @@ import "sync"
 import "fmt"
 import "math/rand"
 
+// Debugging
+const Debug = 0
+
+func DPrintf(format string, a ...interface{}) (n int, err error) {
+  if Debug > 0 {
+    n, err = fmt.Printf(format, a...)
+  }
+  return
+}
 
 type Paxos struct {
   mu sync.Mutex
@@ -36,11 +45,16 @@ type Paxos struct {
   dead bool
   unreliable bool
   rpcCount int
-  peers []string
+  peers []string // paxos cluster
   me int // index into peers[]
 
 
   // Your data here.
+  maxpre int // highest prepare seq seen
+  maxapt int // highest accept seq seen
+  v interface{} // highest accept value seen
+  replyChannel chan StartReply
+  replyMap map[int]StartReply
 }
 
 //
@@ -69,8 +83,9 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
     return false
   }
   defer c.Close()
-    
+  
   err = c.Call(name, args, reply)
+  
   if err == nil {
     return true
   }
@@ -89,6 +104,52 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 //
 func (px *Paxos) Start(seq int, v interface{}) {
   // Your code here.
+  args := &StartArgs{}
+  args.Seq = seq
+  args.V = v
+
+  var reply StartReply
+
+  for _, peer := range px.peers {
+    go func(peer string, args *StartArgs, reply *StartReply) {
+      
+      ok := call(peer, "Paxos.Prepare", args, &reply)
+
+      if ok == false {
+        DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
+      } 
+
+    }(peer, args, &reply)
+  }
+}
+
+// 
+// Start handler
+// 
+func (px *Paxos) Prepare(args *StartArgs, reply *StartReply) error {
+  seq := args.Seq
+  v := args.V
+
+  if seq > px.maxpre {
+    px.maxpre = seq
+
+    // accept
+    reply.OK = true
+    reply.Seq = px.maxapt
+    if px.maxapt == -1 {
+      //init peer
+      reply.V = v
+    } else {
+      reply.V = px.v
+    }
+    
+  } else {
+    // reject
+    reply.OK = false
+  }
+  px.replyMap[seq] = *reply
+  
+  return nil
 }
 
 //
@@ -152,8 +213,15 @@ func (px *Paxos) Min() int {
 // it should not contact other Paxos peers.
 //
 func (px *Paxos) Status(seq int) (bool, interface{}) {
-  // Your code here.
-  return false, nil
+  
+  reply, ok := px.replyMap[seq]
+
+  if ok == true {
+    return true, reply.V
+  } else {
+    return false, nil
+  }
+
 }
 
 
@@ -181,6 +249,10 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 
 
   // Your initialization code here.
+  px.maxpre = -1
+  px.maxapt = -1
+  px.replyMap = make(map[int]StartReply)
+  px.replyChannel = make(chan StartReply)
 
   if rpcs != nil {
     // caller will create socket &c
@@ -208,9 +280,11 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
         if err == nil && px.dead == false {
           if px.unreliable && (rand.Int63() % 1000) < 100 {
             // discard the request.
+            
             conn.Close()
           } else if px.unreliable && (rand.Int63() % 1000) < 200 {
             // process the request but force discard of reply.
+            
             c1 := conn.(*net.UnixConn)
             f, _ := c1.File()
             err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
@@ -222,6 +296,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
           } else {
             px.rpcCount++
             go rpcs.ServeConn(conn)
+            
           }
         } else if err == nil {
           conn.Close()

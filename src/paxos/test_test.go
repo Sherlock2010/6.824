@@ -116,14 +116,14 @@ func TestBasic(t *testing.T) {
     pxa[i] = Make(pxh, i, nil)
   }
 
-  fmt.Printf("Test: Single proposer ...\n")
+  fmt.Printf("1 Test: Single proposer ...\n")
 
   pxa[0].Start(0, "hello")
   waitn(t, pxa, 0, npaxos)
 
   fmt.Printf("  ... Passed\n")
 
-  fmt.Printf("Test: Many proposers, same value ...\n")
+  fmt.Printf("2 Test: Many proposers, same value ...\n")
 
   for i := 0; i < npaxos; i++ {
     pxa[i].Start(1, 77)
@@ -132,7 +132,7 @@ func TestBasic(t *testing.T) {
 
   fmt.Printf("  ... Passed\n")
 
-  fmt.Printf("Test: Many proposers, different values ...\n")
+  fmt.Printf("3 Test: Many proposers, different values ...\n")
 
   pxa[0].Start(2, 100)
   pxa[1].Start(2, 101)
@@ -141,7 +141,7 @@ func TestBasic(t *testing.T) {
 
   fmt.Printf("  ... Passed\n")
 
-  fmt.Printf("Test: Out-of-order instances ...\n")
+  fmt.Printf("4 Test: Out-of-order instances ...\n")
 
   pxa[0].Start(7, 700)
   pxa[0].Start(6, 600)
@@ -176,7 +176,7 @@ func TestDeaf(t *testing.T) {
     pxa[i] = Make(pxh, i, nil)
   }
 
-  fmt.Printf("Test: Deaf proposer ...\n")
+  fmt.Printf("5 Test: Deaf proposer ...\n")
 
   pxa[0].Start(0, "hello")
   waitn(t, pxa, 0, npaxos)
@@ -219,7 +219,7 @@ func TestForget(t *testing.T) {
     pxa[i] = Make(pxh, i, nil)
   }
 
-  fmt.Printf("Test: Forgetting ...\n")
+  fmt.Printf("6 Test: Forgetting ...\n")
 
   // initial Min() correct?
   for i := 0; i < npaxos; i++ {
@@ -302,7 +302,7 @@ func TestManyForget(t *testing.T) {
     pxa[i].unreliable = true
   }
 
-  fmt.Printf("Test: Lots of forgetting ...\n")
+  fmt.Printf("7 Test: Lots of forgetting ...\n")
 
   const maxseq = 20
   done := false
@@ -356,7 +356,7 @@ func TestManyForget(t *testing.T) {
 func TestForgetMem(t *testing.T) {
   runtime.GOMAXPROCS(4)
 
-  fmt.Printf("Test: Paxos frees forgotten instance memory ...\n")
+  fmt.Printf("8 Test: Paxos frees forgotten instance memory ...\n")
 
   const npaxos = 3
   var pxa []*Paxos = make([]*Paxos, npaxos)
@@ -420,7 +420,7 @@ func TestForgetMem(t *testing.T) {
 func TestRPCCount(t *testing.T) {
   runtime.GOMAXPROCS(4)
 
-  fmt.Printf("Test: RPC counts aren't too high ...\n")
+  fmt.Printf("9 Test: RPC counts aren't too high ...\n")
 
   const npaxos = 3
   var pxa []*Paxos = make([]*Paxos, npaxos)
@@ -495,7 +495,7 @@ func TestRPCCount(t *testing.T) {
 func TestMany(t *testing.T) {
   runtime.GOMAXPROCS(4)
 
-  fmt.Printf("Test: Many instances ...\n")
+  fmt.Printf("10 Test: Many instances ...\n")
 
   const npaxos = 3
   var pxa []*Paxos = make([]*Paxos, npaxos)
@@ -545,7 +545,7 @@ func TestMany(t *testing.T) {
 func TestOld(t *testing.T) {
   runtime.GOMAXPROCS(4)
 
-  fmt.Printf("Test: Minority proposal ignored ...\n")
+  fmt.Printf("11 Test: Minority proposal ignored ...\n")
 
   const npaxos = 5
   var pxa []*Paxos = make([]*Paxos, npaxos)
@@ -582,7 +582,7 @@ func TestOld(t *testing.T) {
 func TestManyUnreliable(t *testing.T) {
   runtime.GOMAXPROCS(4)
 
-  fmt.Printf("Test: Many instances, unreliable RPC ...\n")
+  fmt.Printf("12 Test: Many instances, unreliable RPC ...\n")
 
   const npaxos = 3
   var pxa []*Paxos = make([]*Paxos, npaxos)
@@ -691,7 +691,7 @@ func TestPartition(t *testing.T) {
 
   seq := 0
 
-  fmt.Printf("Test: No decision if partitioned ...\n")
+  fmt.Printf("13 Test: No decision if partitioned ...\n")
 
   part(t, tag, npaxos, []int{0,2}, []int{1,3}, []int{4})
   pxa[1].Start(seq, 111)
@@ -699,7 +699,7 @@ func TestPartition(t *testing.T) {
   
   fmt.Printf("  ... Passed\n")
 
-  fmt.Printf("Test: Decision in majority partition ...\n")
+  fmt.Printf("14 Test: Decision in majority partition ...\n")
 
   part(t, tag, npaxos, []int{0}, []int{1,2,3}, []int{4})
   time.Sleep(2 * time.Second)
@@ -707,7 +707,7 @@ func TestPartition(t *testing.T) {
 
   fmt.Printf("  ... Passed\n")
 
-  fmt.Printf("Test: All agree after full heal ...\n")
+  fmt.Printf("15 Test: All agree after full heal ...\n")
 
   pxa[0].Start(seq, 1000) // poke them
   pxa[4].Start(seq, 1004)
@@ -717,7 +717,7 @@ func TestPartition(t *testing.T) {
 
   fmt.Printf("  ... Passed\n")
 
-  fmt.Printf("Test: One peer switches partitions ...\n")
+  fmt.Printf("16 Test: One peer switches partitions ...\n")
 
   for iters := 0; iters < 20; iters++ {
     seq++
@@ -736,7 +736,7 @@ func TestPartition(t *testing.T) {
 
   fmt.Printf("  ... Passed\n")
 
-  fmt.Printf("Test: One peer switches partitions, unreliable ...\n")
+  fmt.Printf("17 Test: One peer switches partitions, unreliable ...\n")
 
 
   for iters := 0; iters < 20; iters++ {
@@ -770,7 +770,7 @@ func TestPartition(t *testing.T) {
 func TestLots(t *testing.T) {
   runtime.GOMAXPROCS(4)
 
-  fmt.Printf("Test: Many requests, changing partitions ...\n")
+  fmt.Printf("18 Test: Many requests, changing partitions ...\n")
 
   tag := "lots"
   const npaxos = 5
