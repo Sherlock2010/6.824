@@ -30,7 +30,7 @@ import "fmt"
 import "math/rand"
 
 // Debugging
-const Debug = 0
+const Debug = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -53,8 +53,10 @@ type Paxos struct {
   maxpre int // highest prepare seq seen
   maxapt int // highest accept seq seen
   v interface{} // highest accept value seen
-  replyChannel chan StartReply
-  replyMap map[int]StartReply
+  preDone sync.WaitGroup
+  AccDone sync.WaitGroup
+
+  insMap map[int]*Instance
 }
 
 //
@@ -104,29 +106,86 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 //
 func (px *Paxos) Start(seq int, v interface{}) {
   // Your code here.
-  args := &StartArgs{}
+  ins := &Instance{}
+  ins.Seq = seq
+  ins.V = v
+  ins.Count = 0
+  ins.OK = false
+  
+  _, ok := px.insMap[seq] 
+  if ok == false {
+    px.insMap[seq] = ins
+
+    npaxos := len(px.peers)
+    px.preDone.Add(npaxos)
+
+    // prepare thread
+    go px.Prepare(seq, v)
+  
+    // accept thread
+    go px.Accept(seq)
+  }
+
+}
+
+func (px *Paxos) Prepare(seq int, v interface{}) error{
+  args := &PreArgs{}
   args.Seq = seq
   args.V = v
 
-  var reply StartReply
+  var reply PreReply
 
   for _, peer := range px.peers {
-    go func(peer string, args *StartArgs, reply *StartReply) {
-      
-      ok := call(peer, "Paxos.Prepare", args, &reply)
+    go func(peer string, args *PreArgs, reply *PreReply) {
+      // prepare
+      ok := call(peer, "Paxos.PrepareHandler", args, &reply)
 
       if ok == false {
         DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
-      } 
+      }
+      px.preDone.Done()
+      DPrintf("[INFO] %d finish prepare ...\n", px.me)
+    }(peer, args, &reply)
+  }
+
+  return nil
+}
+
+func (px *Paxos) Accept(seq int) error{
+  px.preDone.Wait()
+
+  ins := px.insMap[seq]
+
+  args := &AcceptArgs{}
+  args.Seq = ins.Seq
+  args.V = ins.V
+
+  var reply AcceptReply
+
+  for _, peer := range px.peers {
+      
+    go func(peer string, args *AcceptArgs, reply *AcceptReply) {
+      // accept
+
+      ok := call(peer, "Paxos.AcceptHandler", args, &reply)
+
+      if ok == false {
+        DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
+      }
 
     }(peer, args, &reply)
   }
+
+
+  return nil
 }
 
 // 
-// Start handler
+// Prepare handler
 // 
-func (px *Paxos) Prepare(args *StartArgs, reply *StartReply) error {
+func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
+  px.mu.Lock()
+
   seq := args.Seq
   v := args.V
 
@@ -135,7 +194,8 @@ func (px *Paxos) Prepare(args *StartArgs, reply *StartReply) error {
 
     // accept
     reply.OK = true
-    reply.Seq = px.maxapt
+    reply.Seq = px.maxpre // maybe wrong ?
+
     if px.maxapt == -1 {
       //init peer
       reply.V = v
@@ -146,9 +206,31 @@ func (px *Paxos) Prepare(args *StartArgs, reply *StartReply) error {
   } else {
     // reject
     reply.OK = false
+
   }
-  px.replyMap[seq] = *reply
   
+  DPrintf("[INFO] %d Reply V %s ...\n", px.me, reply.V)
+  px.mu.Unlock()
+  return nil
+}
+
+// 
+// Accept handler
+// 
+func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
+  seq := args.Seq
+  v := args.V
+
+  if seq >= px.maxpre {
+    px.maxpre = seq
+    px.maxapt = seq
+    px.v = v
+    reply.OK = true
+    px.insMap[seq].OK = true
+  } else {
+    reply.OK = false
+  }
+  DPrintf("[INFO] %d finish accept ...\n", px.me)
   return nil
 }
 
@@ -159,7 +241,10 @@ func (px *Paxos) Prepare(args *StartArgs, reply *StartReply) error {
 // see the comments for Min() for more explanation.
 //
 func (px *Paxos) Done(seq int) {
-  // Your code here.
+  
+  for i := 0; i <= seq; i++ {
+    delete(px.insMap, i)
+  }
 }
 
 //
@@ -169,7 +254,7 @@ func (px *Paxos) Done(seq int) {
 //
 func (px *Paxos) Max() int {
   // Your code here.
-  return 0
+  return px.maxpre
 }
 
 //
@@ -201,8 +286,32 @@ func (px *Paxos) Max() int {
 // instances.
 // 
 func (px *Paxos) Min() int {
-  // You code here.
-  return 0
+  minSeq := px.Max() 
+  rpcCount := 0
+
+  for _, peer := range px.peers {
+    args := &MaxArgs{}
+
+    var reply MaxReply
+
+    ok := call(peer, "Paxos.Max", args, reply)
+    if ok == false {
+      DPrintf("[Err] Call RPC to %s Fail ...\n", peer)
+    }
+
+    if reply.Seq < minSeq {
+      minSeq = reply.Seq
+    }
+
+    rpcCount ++
+  }
+  if rpcCount == len(px.peers) {
+    return minSeq + 1
+  } else {
+    // some peers rpc fail
+    return -1
+  }
+  
 }
 
 //
@@ -214,10 +323,11 @@ func (px *Paxos) Min() int {
 //
 func (px *Paxos) Status(seq int) (bool, interface{}) {
   
-  reply, ok := px.replyMap[seq]
+  ins, ok := px.insMap[seq]
 
-  if ok == true {
-    return true, reply.V
+  if ok == true && ins.OK == true{
+
+    return true, ins.V
   } else {
     return false, nil
   }
@@ -251,8 +361,8 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
   // Your initialization code here.
   px.maxpre = -1
   px.maxapt = -1
-  px.replyMap = make(map[int]StartReply)
-  px.replyChannel = make(chan StartReply)
+  px.insMap = make(map[int]*Instance)
+  
 
   if rpcs != nil {
     // caller will create socket &c

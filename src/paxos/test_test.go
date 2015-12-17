@@ -19,16 +19,18 @@ func port(tag string, host int) string {
   return s
 }
 
+//return count that peers agree the seq
 func ndecided(t *testing.T, pxa []*Paxos, seq int) int {
   count := 0
   var v interface{}
   for i := 0; i < len(pxa); i++ {
     if pxa[i] != nil {
       decided, v1 := pxa[i].Status(seq)
+      fmt.Printf("[INFO] Get (%d, %t) ...\n", pxa[i].me, decided)
       if decided {
         if count > 0 && v != v1 {
-          t.Fatalf("decided values do not match; seq=%v i=%v v=%v v1=%v",
-            seq, i, v, v1)
+          t.Fatalf("%d decided values do not match; seq=%v i=%v v=%v v1=%v",
+            pxa[i].me, seq, i, v, v1)
         }
         count++
         v = v1
