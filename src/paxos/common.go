@@ -2,9 +2,11 @@ package paxos
 
 type Instance struct {
 	Seq int
-	Count int
-	OK bool
 	V interface{}
+	tmpV interface{}
+
+	Count int // proposer, count that agree to the instance
+	OK bool // whether application agree to the instance
 }
 
 type PreArgs struct {
@@ -14,7 +16,7 @@ type PreArgs struct {
 
 type PreReply struct {
 	OK bool
-	Seq int
+	Maxapt int 
 	V interface{} // Value application can choose
 }
 
