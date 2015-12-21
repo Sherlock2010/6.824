@@ -2,6 +2,7 @@ package paxos
 
 type Instance struct {
 	Seq int
+	Num string // unique number, ascending order with time
 	V interface{}
 	tmpV interface{}
 
@@ -12,11 +13,12 @@ type Instance struct {
 type PreArgs struct {
 	Seq int
 	V interface{}
+	Num string
 }
 
 type PreReply struct {
 	OK bool
-	Maxapt int 
+	Maxapt string 
 	V interface{} // Value application can choose
 }
 
@@ -31,8 +33,10 @@ type MaxReply struct {
 type AcceptArgs struct {
 	Seq int
 	V interface{}
+	Num string
 }
 
 type AcceptReply struct {
+	Num string
 	OK bool
 }
