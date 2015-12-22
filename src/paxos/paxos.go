@@ -116,6 +116,13 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 
 
 //
+// if n is majority of the peers
+// 
+func (px *Paxos) isMajority (n int) bool {
+  return n >= ( len(px.peers) / 2 + 1 )
+}
+
+//
 // the application wants paxos to start agreement on
 // instance seq, with proposed value v.
 // Start() returns right away; the application will
@@ -130,14 +137,7 @@ func (px *Paxos) Start(seq int, v interface{}) {
   if ok == false {
     // init instance
     px.MakeInstance(seq, v)
-    // ins := &Instance{}
-    // ins.Seq = seq
-    // ins.V = v
-    // ins.Count = 0
-    // ins.OK = false
-
-    // px.insMap[seq] = ins
-
+ 
     npaxos := len(px.peers)
     px.preDone.Add(npaxos)
 
@@ -148,7 +148,21 @@ func (px *Paxos) Start(seq int, v interface{}) {
 
 }
 
-func (px *Paxos) Prepare(seq int) error{
+func (px *Paxos) doProposer(seq int) {
+  for {
+    ok, acceptors := px.Prepare(seq)
+
+    if ok == true {
+      ok := px.Accept(seq, acceptors)
+    }
+
+    if ok == true {
+      px.Decision()
+    }
+  }
+}
+
+func (px *Paxos) Prepare(seq int) (bool, [] string){
   ins := px.insMap[seq]
 
   args := &PreArgs{}
@@ -157,6 +171,9 @@ func (px *Paxos) Prepare(seq int) error{
   args.Num = ins.Num
 
   var reply PreReply
+
+  acceptors := make([]string, 0)
+  count := 0
 
   for _, peer := range px.peers {
     go func(peer string, args *PreArgs, reply *PreReply) {
@@ -170,7 +187,8 @@ func (px *Paxos) Prepare(seq int) error{
       DPrintf("[INFO] %d prepare handler return %t ...\n", px.me, reply.OK)
 
       if reply.OK == true {
-        px.insMap[args.Seq].Count ++
+        acceptors = append(acceptors, peer)
+        count ++
 
         // No bad effect, reply.V is treated in prepare handler 
         px.insMap[args.Seq].tmpV = reply.V
@@ -182,22 +200,10 @@ func (px *Paxos) Prepare(seq int) error{
     }(peer, args, &reply)
   }
 
-  go func(seq int) {
-    px.preDone.Wait()
-
-    if px.insMap[seq].Count >= (len(px.peers) / 2 + 1) {
-      
-      px.insMap[args.Seq].V = px.insMap[args.Seq].tmpV
-
-      // accept thread
-      go px.Accept(seq)
-    }
-  }(seq)
-
-  return nil
+  return px.isMajority(count), acceptors
 }
 
-func (px *Paxos) Accept(seq int) error{
+func (px *Paxos) Accept(seq int, acceptors [] string) error{
 
   ins := px.insMap[seq]
 
@@ -206,9 +212,11 @@ func (px *Paxos) Accept(seq int) error{
   args.V = ins.V
   args.Num = ins.Num
 
+  count := 0
+
   var reply AcceptReply
 
-  for _, peer := range px.peers {
+  for _, peer := range acceptors {
       
     go func(peer string, args *AcceptArgs, reply *AcceptReply) {
       // accept   
@@ -219,13 +227,27 @@ func (px *Paxos) Accept(seq int) error{
         DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
       }
 
+      if reply.OK == true {
+        count ++
+      }
       // px.insMap[seq].OK = reply.OK
       DPrintf("[Succ] %s num %s agree %t to %s ...\n", peer, args.Num, reply.OK, reply.Num)
 
     }(peer, args, &reply)
   }
 
-  return nil
+  return px.isMajority(count)
+}
+
+func (px *Paxos) Decision() {
+  for _, peer := range (px.peers) {
+    ok := call(peer, "Paxos.DecesionHandler", args, &reply)
+
+    if ok == false {
+      DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
+    }
+  }
+  
 }
 
 // 
@@ -312,6 +334,11 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
   
   return nil
 }
+
+func (px *Paxos) DecesionHandler() {
+    
+}
+
 
 // generate unique number ascending order with time
 func (px *Paxos) Generate() string {
