@@ -32,7 +32,7 @@ import "math/rand"
 import "strconv"
 
 // Debugging
-const Debug = 0
+const Debug = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -118,7 +118,7 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 //
 // if n is majority of the peers
 // 
-func (px *Paxos) isMajority (n int) bool {
+func (px *Paxos) isMajority(n int) bool {
   return n >= ( len(px.peers) / 2 + 1 )
 }
 
@@ -142,7 +142,7 @@ func (px *Paxos) Start(seq int, v interface{}) {
     px.preDone.Add(npaxos)
 
     // prepare thread
-    go px.Prepare(seq)
+    go px.doProposer(seq)
 
   }
 
@@ -154,11 +154,13 @@ func (px *Paxos) doProposer(seq int) {
 
     if ok == true {
       ok := px.Accept(seq, acceptors)
-    }
 
-    if ok == true {
-      px.Decision()
-    }
+      if ok == true {
+        px.Decision(seq)
+
+        break
+      }
+    } 
   }
 }
 
@@ -184,8 +186,6 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
         DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
       }
 
-      DPrintf("[INFO] %d prepare handler return %t ...\n", px.me, reply.OK)
-
       if reply.OK == true {
         acceptors = append(acceptors, peer)
         count ++
@@ -196,14 +196,14 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
       }
 
       px.preDone.Done()
-      DPrintf("[INFO] %d finish prepare ...\n", px.me)
+
     }(peer, args, &reply)
   }
 
   return px.isMajority(count), acceptors
 }
 
-func (px *Paxos) Accept(seq int, acceptors [] string) error{
+func (px *Paxos) Accept(seq int, acceptors [] string) bool{
 
   ins := px.insMap[seq]
 
@@ -239,7 +239,15 @@ func (px *Paxos) Accept(seq int, acceptors [] string) error{
   return px.isMajority(count)
 }
 
-func (px *Paxos) Decision() {
+func (px *Paxos) Decision(seq int) {
+  ins := px.insMap[seq]
+
+  args := &DecisionArgs{}
+  args.Seq = ins.Seq
+  args.Num = ins.Num
+  args.Decided = true
+
+  var reply DecisionReply
   for _, peer := range (px.peers) {
     ok := call(peer, "Paxos.DecesionHandler", args, &reply)
 
@@ -264,16 +272,9 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
   _, ok := px.insMap[seq] 
 
   if ok == false {
-    // init instance
     px.MakeInstance(seq, v)
-    // ins := &Instance{}
-    // ins.Seq = seq
-    // ins.V = v
-    // ins.Count = 0
-    // ins.OK = false
-
-    // px.insMap[seq] = ins
   }
+  
   DPrintf("[INFO] %d num %s, px.maxpre %s ...\n", px.me, num, px.maxpre)
   if num > px.maxpre {
     DPrintf("[INFO] %d prepare handler %s ...\n", px.me, num)
@@ -335,8 +336,15 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
   return nil
 }
 
-func (px *Paxos) DecesionHandler() {
-    
+func (px *Paxos) DecesionHandler(args *DecisionArgs, reply *DecisionReply) error {
+    seq := args.Seq
+    decided := args.Decided
+
+    ins := px.insMap[seq]
+
+    ins.OK = decided
+
+    return nil
 }
 
 

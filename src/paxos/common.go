@@ -40,3 +40,13 @@ type AcceptReply struct {
 	Num string
 	OK bool
 }
+
+type DecisionArgs struct {
+	Seq int
+	Num string
+	Decided bool
+} 
+
+type DecisionReply struct {
+
+} 
