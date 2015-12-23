@@ -159,7 +159,7 @@ func (px *Paxos) doProposer(seq int) {
     }
     
   }
-  DPrintf("[INFO] End Proposer ...\n")
+  DPrintf("[INFO] %d End Proposer ...\n", px.me)
 }
 
 func (px *Paxos) Prepare(seq int) (bool, [] string){
@@ -186,7 +186,9 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
       ok := call(peer, "Paxos.PrepareHandler", args, &reply)
 
       if ok == false {
-        DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
+        DPrintf("[Err] Call PrepareHandler to %s Fail ...\n", peer)
+      } else {
+        DPrintf("[Succ] Call PrepareHandler to %s Succ ...\n", peer)
       }
       px.prepareDone.Done()
       if reply.OK == true {
@@ -229,7 +231,9 @@ func (px *Paxos) Accept(seq int, acceptors [] string) bool{
       ok := call(peer, "Paxos.AcceptHandler", args, &reply)
 
       if ok == false {
-        DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
+        DPrintf("[Err] Call AcceptHandler to %s Fail ...\n", peer)
+      } else {
+        DPrintf("[Succ] Call AcceptHandler to %s Succ ...\n", peer)
       }
       px.acceptDone.Done()
       if reply.OK == true {
@@ -254,12 +258,14 @@ func (px *Paxos) Decision(seq int) {
 
   var reply DecisionReply
   for _, peer := range (px.peers) {
-    DPrintf("[INFO] %d sent decision to %s ...\n", px.me, peer)
+    DPrintf("[INFO] %d sent decision %s to %s ...\n", px.me, args.Num, peer)
 
-    ok := call(peer, "Paxos.DecesionHandler", args, &reply)
+    ok := call(peer, "Paxos.DecisionHandler", args, &reply)
 
     if ok == false {
-      DPrintf("[Err] Call PRC to %s Fail ...\n", peer)
+      DPrintf("[Err] Call DecisionHandler to %s Fail ...\n", peer)
+    } else {
+      DPrintf("[Succ] Call DecisionHandler to %s Succ ...\n", peer)
     }
   }
   
@@ -337,7 +343,7 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
   return nil
 }
 
-func (px *Paxos) DecesionHandler(args *DecisionArgs, reply *DecisionReply) error {
+func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error {
     seq := args.Seq
     decided := args.Decided
     num := args.Num

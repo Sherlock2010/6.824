@@ -44,6 +44,7 @@ type AcceptReply struct {
 type DecisionArgs struct {
 	Seq int
 	Num string
+	V interface{}
 	Decided bool
 } 
 
