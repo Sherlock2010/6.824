@@ -183,7 +183,7 @@ func TestBasic(t *testing.T) {
   pxa[0].Start(0, "hello")
   waitn(t, pxa, 0, npaxos)
 
-  fmt.Printf(" ... 1/3 Passed\n")
+  fmt.Printf(" ... 1/4 Passed\n")
 
   os.Remove(pxh[0]) // pxh_0
   os.Remove(pxh[npaxos-1]) // pxh_4
@@ -195,7 +195,7 @@ func TestBasic(t *testing.T) {
     t.Fatalf("a deaf peer heard about a decision")
   }
 
-  fmt.Printf(" ... 2/3 Passed\n")
+  fmt.Printf(" ... 2/4 Passed\n")
 
   pxa[0].Start(1, "xxx")
   waitn(t, pxa, 1, npaxos-1)
@@ -203,6 +203,8 @@ func TestBasic(t *testing.T) {
   if ndecided(t, pxa, 1) != npaxos - 1 {
     t.Fatalf("a deaf peer heard about a decision")
   }
+
+  fmt.Printf(" ... 3/4 Passed\n")
 
   pxa[npaxos-1].Start(1, "yyy")
   waitn(t, pxa, 1, npaxos)

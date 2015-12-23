@@ -68,7 +68,6 @@ func (px *Paxos) MakeInstance(seq int, v interface{}) {
   
   ins.Seq = seq
   ins.V = v
-  ins.Count = 0
   ins.OK = false
 
   px.insMap[seq] = ins
@@ -177,30 +176,52 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
   acceptors := make([]string, 0)
   count := 0
 
-  for _, peer := range px.peers {
+  for i, peer := range px.peers {
     px.prepareDone.Add(1)
-    go func(peer string, args *PreArgs, reply *PreReply) {
-      // prepare
-      DPrintf("[INFO] %d sent prepare to %s ...\n", px.me, peer)
 
-      ok := call(peer, "Paxos.PrepareHandler", args, &reply)
+    if i == px.me {
+      go func(args *PreArgs, reply *PreReply) {
+        // call local prepare
+        DPrintf("[INFO] %d sent prepare to %s ...\n", px.me, peer)
 
-      if ok == false {
-        DPrintf("[Err] Call PrepareHandler to %s Fail ...\n", peer)
-      } else {
-        DPrintf("[Succ] Call PrepareHandler to %s Succ ...\n", peer)
-      }
-      px.prepareDone.Done()
-      if reply.OK == true {
-        acceptors = append(acceptors, peer)
-        count ++
+        px.PrepareHandler(args, reply)
 
-        // No bad effect, reply.V is treated in prepare handler 
-        px.insMap[args.Seq].tmpV = reply.V
+        px.prepareDone.Done()
+        if reply.OK == true {
+          acceptors = append(acceptors, peer)
+          count ++
   
-      }
+          // No bad effect, reply.V is treated in prepare handler 
+          px.insMap[args.Seq].tmpV = reply.V
+    
+        }
+      }(args, &reply)
+      
+    } else {
+      go func(peer string, args *PreArgs, reply *PreReply) {
+        // call remote prepare
+        DPrintf("[INFO] %d sent prepare to %s ...\n", px.me, peer)
+  
+        ok := call(peer, "Paxos.PrepareHandler", args, &reply)
+  
+        if ok == false {
+          DPrintf("[Err] Call PrepareHandler to %s Fail ...\n", peer)
+        } else {
+          DPrintf("[Succ] Call PrepareHandler to %s Succ ...\n", peer)
+        }
+        px.prepareDone.Done()
+        if reply.OK == true {
+          acceptors = append(acceptors, peer)
+          count ++
+  
+          // No bad effect, reply.V is treated in prepare handler 
+          px.insMap[args.Seq].tmpV = reply.V
+    
+        }
 
-    }(peer, args, &reply)
+      }(peer, args, &reply)
+    }
+    
   }
 
   // wait until add rpc finish
@@ -215,33 +236,50 @@ func (px *Paxos) Accept(seq int, acceptors [] string) bool{
 
   args := &AcceptArgs{}
   args.Seq = ins.Seq
-  args.V = ins.V
+  args.V = ins.tmpV
   args.Num = ins.Num
 
   count := 0
 
   var reply AcceptReply
 
-  for _, peer := range acceptors {
+  for i, peer := range acceptors {
     px.acceptDone.Add(1)
-    go func(peer string, args *AcceptArgs, reply *AcceptReply) {
-      // accept   
-      DPrintf("[INFO] %d sent accept to %s ...\n", px.me, peer)
 
-      ok := call(peer, "Paxos.AcceptHandler", args, &reply)
+    if i == px.me {
+      go func (args *AcceptArgs, reply *AcceptReply) {
+        DPrintf("[INFO] %d sent accept to %s ...\n", px.me, peer)
+        
+        px.AcceptHandler(args, reply)
 
-      if ok == false {
-        DPrintf("[Err] Call AcceptHandler to %s Fail ...\n", peer)
-      } else {
-        DPrintf("[Succ] Call AcceptHandler to %s Succ ...\n", peer)
-      }
-      px.acceptDone.Done()
-      if reply.OK == true {
-        count ++
-      }
-      // px.insMap[seq].OK = reply.OK
+        px.acceptDone.Done()
+        if reply.OK == true {
+          count ++
+        }
+
+      }(args, &reply)
+
+    } else {
+      go func(peer string, args *AcceptArgs, reply *AcceptReply) {
+        // accept   
+        DPrintf("[INFO] %d sent accept to %s ...\n", px.me, peer)
+  
+        ok := call(peer, "Paxos.AcceptHandler", args, &reply)
+  
+        if ok == false {
+          DPrintf("[Err] Call AcceptHandler to %s Fail ...\n", peer)
+        } else {
+          DPrintf("[Succ] Call AcceptHandler to %s Succ ...\n", peer)
+        }
+        px.acceptDone.Done()
+        if reply.OK == true {
+          count ++
+        }
+        // px.insMap[seq].OK = reply.OK
       
-    }(peer, args, &reply)
+      }(peer, args, &reply)
+    }
+
   }
   px.acceptDone.Wait()
 
@@ -250,10 +288,12 @@ func (px *Paxos) Accept(seq int, acceptors [] string) bool{
 
 func (px *Paxos) Decision(seq int) {
   ins := px.insMap[seq]
+  ins.V = ins.tmpV
 
   args := &DecisionArgs{}
   args.Seq = ins.Seq
   args.Num = ins.Num
+  args.V = ins.V
   args.Decided = true
 
   var reply DecisionReply
@@ -349,6 +389,7 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     num := args.Num
 
     ins := px.insMap[seq]
+    ins.V = args.V // ?
 
     ins.OK = decided
     DPrintf("[INFO] %d decision handle %s ...\n", px.me, num)

@@ -6,7 +6,6 @@ type Instance struct {
 	V interface{}
 	tmpV interface{}
 
-	Count int // proposer, count that agree to the instance
 	OK bool // whether application agree to the instance
 }
 
