@@ -32,7 +32,7 @@ import "math/rand"
 import "strconv"
 
 // Debugging
-const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -54,6 +54,7 @@ type Paxos struct {
   // Your data here.
   prepareDone sync.WaitGroup
   acceptDone sync.WaitGroup
+  decisionDone sync.WaitGroup
 
   maxpre string // highest prepare num seen
   maxapt string // highest accept num seen
@@ -297,17 +298,34 @@ func (px *Paxos) Decision(seq int) {
   args.Decided = true
 
   var reply DecisionReply
-  for _, peer := range (px.peers) {
-    DPrintf("[INFO] %d sent decision %s to %s ...\n", px.me, args.Num, peer)
+  for i, peer := range (px.peers) {
+    px.decisionDone.Add(1)
+    if i == px.me {
+      DPrintf("[INFO] %d sent decision %s to %s ...\n", px.me, args.Num, peer)
 
-    ok := call(peer, "Paxos.DecisionHandler", args, &reply)
-
-    if ok == false {
-      DPrintf("[Err] Call DecisionHandler to %s Fail ...\n", peer)
+      go func(args *DecisionArgs, reply *DecisionReply) {
+        px.DecisionHandler(args, reply)
+        px.decisionDone.Done()
+      }(args, &reply)
+      
     } else {
-      DPrintf("[Succ] Call DecisionHandler to %s Succ ...\n", peer)
-    }
+      DPrintf("[INFO] %d sent decision %s to %s ...\n", px.me, args.Num, peer)
+
+      go func(peer string, args *DecisionArgs, reply *DecisionReply) {
+
+        ok := call(peer, "Paxos.DecisionHandler", args, &reply)
+
+        if ok == false {
+          DPrintf("[Err] Call DecisionHandler to %s Fail ...\n", peer)
+        } else {
+          DPrintf("[Succ] Call DecisionHandler to %s Succ ...\n", peer)
+        }
+        px.decisionDone.Done()
+      }(peer, args, &reply) 
+    } 
   }
+
+  px.decisionDone.Wait()
   
 }
 
