@@ -41,12 +41,14 @@ type AcceptReply struct {
 }
 
 type DecisionArgs struct {
+	Me int 
 	Seq int
 	Num string
 	V interface{}
 	Decided bool
+	maxDone int // max seq this peer holds
 } 
 
 type DecisionReply struct {
-
+	maxDone int // max seq other peer holds
 } 

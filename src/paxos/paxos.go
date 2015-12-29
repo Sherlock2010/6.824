@@ -61,6 +61,7 @@ type Paxos struct {
   v interface{} // highest accept value seen
 
   insMap map[int]*Instance
+  done []int
 }
 
 func (px *Paxos) MakeInstance(seq int, v interface{}) {
@@ -289,6 +290,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string) bool{
 
 func (px *Paxos) Decision(seq int) {
   ins := px.insMap[seq]
+
   ins.V = ins.tmpV
 
   args := &DecisionArgs{}
@@ -296,6 +298,8 @@ func (px *Paxos) Decision(seq int) {
   args.Num = ins.Num
   args.V = ins.V
   args.Decided = true
+  args.Me = px.me
+  args.maxDone = px.done[px.me]
 
   var reply DecisionReply
   for i, peer := range (px.peers) {
@@ -319,6 +323,8 @@ func (px *Paxos) Decision(seq int) {
           DPrintf("[Err] Call DecisionHandler to %s Fail ...\n", peer)
         } else {
           DPrintf("[Succ] Call DecisionHandler to %s Succ ...\n", peer)
+
+          px.done[i] = reply.maxDone
         }
         px.decisionDone.Done()
       }(peer, args, &reply) 
@@ -405,11 +411,17 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     seq := args.Seq
     decided := args.Decided
     num := args.Num
+    peer := args.Me
 
     ins := px.insMap[seq]
+    DPrintf("[INFO] %d Change %d V from %s to %s ...\n",px.me, seq, ins.V, args.V)
     ins.V = args.V // ?
 
     ins.OK = decided
+
+    px.done[peer] = args.maxDone
+    reply.maxDone = px.done[px.me]
+
     DPrintf("[INFO] %d decision handle %s ...\n", px.me, num)
     return nil
 }
@@ -430,8 +442,8 @@ func (px *Paxos) Generate() string {
 //
 func (px *Paxos) Done(seq int) {
   
-  for i := 0; i <= seq; i++ {
-    delete(px.insMap, i)
+  if seq > px.done[px.me] {
+    px.done[px.me] = seq
   }
 }
 
@@ -481,32 +493,15 @@ func (px *Paxos) Max() int {
 // instances.
 // 
 func (px *Paxos) Min() int {
-  minSeq := px.Max() 
-  rpcCount := 0
+  min := px.done[px.me]
 
-  for _, peer := range px.peers {
-    args := &MaxArgs{}
-
-    var reply MaxReply
-
-    ok := call(peer, "Paxos.Max", args, reply)
-    if ok == false {
-      DPrintf("[Err] Call RPC to %s Fail ...\n", peer)
+  for _, seq := range px.done {
+    if min > seq {
+      min = seq
     }
-
-    if reply.Seq < minSeq {
-      minSeq = reply.Seq
-    }
-
-    rpcCount ++
-  }
-  if rpcCount == len(px.peers) {
-    return minSeq + 1
-  } else {
-    // some peers rpc fail
-    return -1
   }
   
+  return min + 1
 }
 
 //
@@ -558,6 +553,11 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
   px.maxpre = ""
   px.maxapt = ""
   px.insMap = make(map[int]*Instance)
+
+  px.done = make([]int, len(peers))
+  for i := range peers{
+    px.done[i] = -1
+  }
 
   if rpcs != nil {
     // caller will create socket &c
