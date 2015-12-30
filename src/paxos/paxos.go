@@ -299,7 +299,7 @@ func (px *Paxos) Decision(seq int) {
   args.V = ins.V
   args.Decided = true
   args.Me = px.me
-  args.maxDone = px.done[px.me]
+  args.MaxDone = px.done[px.me]
 
   var reply DecisionReply
   for i, peer := range (px.peers) {
@@ -324,7 +324,7 @@ func (px *Paxos) Decision(seq int) {
         } else {
           DPrintf("[Succ] Call DecisionHandler to %s Succ ...\n", peer)
 
-          px.done[i] = reply.maxDone
+          px.done[i] = reply.MaxDone
         }
         px.decisionDone.Done()
       }(peer, args, &reply) 
@@ -419,8 +419,8 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
 
     ins.OK = decided
 
-    px.done[peer] = args.maxDone
-    reply.maxDone = px.done[px.me]
+    px.done[peer] = args.MaxDone
+    reply.MaxDone = px.done[px.me]
 
     DPrintf("[INFO] %d decision handle %s ...\n", px.me, num)
     return nil
