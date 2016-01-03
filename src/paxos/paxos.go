@@ -173,8 +173,6 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
   args.V = ins.V
   args.Num = ins.Num
 
-  var reply PreReply
-
   acceptors := make([]string, 0)
   count := 0
 
@@ -182,6 +180,7 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
     px.prepareDone.Add(1)
 
     if i == px.me {
+      var reply PreReply
       go func(args *PreArgs, reply *PreReply) {
         // call local prepare
         DPrintf("[INFO] %d sent prepare to %s ...\n", px.me, peer)
@@ -200,6 +199,7 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
       }(args, &reply)
       
     } else {
+      var reply PreReply
       go func(peer string, args *PreArgs, reply *PreReply) {
         // call remote prepare
         DPrintf("[INFO] %d sent prepare to %s ...\n", px.me, peer)
@@ -228,7 +228,7 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
 
   // wait until add rpc finish
   px.prepareDone.Wait()
-
+  DPrintf("[INFO] %d receive prepare count %d ...\n", px.me, count)
   return px.isMajority(count), acceptors
 }
 
@@ -243,12 +243,11 @@ func (px *Paxos) Accept(seq int, acceptors [] string) bool{
 
   count := 0
 
-  var reply AcceptReply
-
   for i, peer := range acceptors {
     px.acceptDone.Add(1)
 
     if i == px.me {
+      var reply AcceptReply
       go func (args *AcceptArgs, reply *AcceptReply) {
         DPrintf("[INFO] %d sent accept to %s ...\n", px.me, peer)
         
@@ -262,6 +261,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string) bool{
       }(args, &reply)
 
     } else {
+      var reply AcceptReply
       go func(peer string, args *AcceptArgs, reply *AcceptReply) {
         // accept   
         DPrintf("[INFO] %d sent accept to %s ...\n", px.me, peer)
@@ -284,7 +284,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string) bool{
 
   }
   px.acceptDone.Wait()
-
+  DPrintf("[INFO] %d receive accept count %d ...\n", px.me, count)
   return px.isMajority(count)
 }
 
@@ -352,6 +352,8 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
     px.MakeInstance(seq, v)
   }
 
+  reply.OK = false
+
   if num > px.maxpre {
     
     px.maxpre = num  
@@ -367,9 +369,7 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
     }      
     DPrintf("[INFO] %d prepare handle %s ...\n", px.me, num)
   } else {
-    // reject
-    
-    reply.OK = false  
+    // reject  
     DPrintf("[INFO] %d prepare reject %s ...\n", px.me, num)
   }
   
@@ -388,6 +388,7 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
   v := args.V
 
   reply.Num = args.Num
+  reply.OK = false
  
   if num >= px.maxpre {
     
@@ -400,7 +401,7 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
     px.insMap[seq].OK = true
     DPrintf("[INFO] %d accept handle %s ...\n", px.me, num)
   } else {
-    reply.OK = false
+    
     DPrintf("[INFO] %d accept reject %s ...\n", px.me, num)
   }
   
