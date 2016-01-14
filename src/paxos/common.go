@@ -4,7 +4,10 @@ type Instance struct {
 	Seq int
 	Num string // unique number, ascending order with time
 	V interface{}
-	tmpV interface{}
+
+	Maxpre string // highest prepare num seen
+  	Maxapt string // highest accept num seen
+  	Maxaptv interface{} // highest accept value seen
 
 	OK bool // whether application agree to the instance
 }
@@ -22,7 +25,7 @@ type PreReply struct {
 }
 
 type MaxArgs struct {
-
+	
 }
 
 type MaxReply struct {

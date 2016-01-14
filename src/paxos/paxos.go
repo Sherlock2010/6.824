@@ -56,10 +56,6 @@ type Paxos struct {
   acceptDone sync.WaitGroup
   decisionDone sync.WaitGroup
 
-  maxpre string // highest prepare num seen
-  maxapt string // highest accept num seen
-  v interface{} // highest accept value seen
-
   insMap map[int]*Instance
   done []int
 }
@@ -70,6 +66,11 @@ func (px *Paxos) MakeInstance(seq int, v interface{}) {
   
   ins.Seq = seq
   ins.V = v
+
+  ins.Maxpre = ""
+  ins.Maxapt = ""
+  ins.Maxaptv = nil
+
   ins.OK = false
 
   px.insMap[seq] = ins
@@ -148,13 +149,13 @@ func (px *Paxos) doProposer(seq int) {
   for {
     DPrintf("[INFO] %d Start Proposer ..\n", px.me)
 
-    ok, acceptors := px.Prepare(seq)
+    ok, acceptors, V := px.Prepare(seq)
 
     if ok == true {
-      ok = px.Accept(seq, acceptors)
+      ok = px.Accept(seq, acceptors, V)
     }
     if ok == true {
-      px.Decision(seq)
+      px.Decision(seq, V)
 
       break
     }
@@ -163,7 +164,7 @@ func (px *Paxos) doProposer(seq int) {
   DPrintf("[INFO] %d End Proposer ...\n", px.me)
 }
 
-func (px *Paxos) Prepare(seq int) (bool, [] string){
+func (px *Paxos) Prepare(seq int) (bool, [] string, interface{}){
   ins := px.insMap[seq]
   ins.Num = px.Generate() 
   DPrintf("[INFO] Init %d %s ...\n", ins.Seq, ins.Num)
@@ -175,6 +176,8 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
 
   acceptors := make([]string, 0)
   count := 0
+  maxN := ""
+  maxV := ins.V
 
   for i, peer := range px.peers {
     px.prepareDone.Add(1)
@@ -191,10 +194,14 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
         if reply.OK == true {
           acceptors = append(acceptors, peer)
           count ++
-  
-          // No bad effect, reply.V is treated in prepare handler 
-          px.insMap[args.Seq].tmpV = reply.V
-    
+          px.mu.Lock()
+          
+          if reply.Maxapt > maxN {
+            maxN = reply.Maxapt
+            maxV = reply.V
+          } 
+          
+          px.mu.Unlock()
         }
       }(args, &reply)
       
@@ -216,8 +223,14 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
           acceptors = append(acceptors, peer)
           count ++
   
-          // No bad effect, reply.V is treated in prepare handler 
-          px.insMap[args.Seq].tmpV = reply.V
+          px.mu.Lock()
+          
+          if reply.Maxapt > maxN {
+            maxN = reply.Maxapt
+            maxV = reply.V
+          } 
+          
+          px.mu.Unlock()
     
         }
 
@@ -229,16 +242,16 @@ func (px *Paxos) Prepare(seq int) (bool, [] string){
   // wait until add rpc finish
   px.prepareDone.Wait()
   DPrintf("[INFO] %d receive prepare count %d ...\n", px.me, count)
-  return px.isMajority(count), acceptors
+  return px.isMajority(count), acceptors, maxV
 }
 
-func (px *Paxos) Accept(seq int, acceptors [] string) bool{
+func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
 
   ins := px.insMap[seq]
 
   args := &AcceptArgs{}
   args.Seq = ins.Seq
-  args.V = ins.tmpV
+  args.V = V
   args.Num = ins.Num
 
   count := 0
@@ -288,10 +301,10 @@ func (px *Paxos) Accept(seq int, acceptors [] string) bool{
   return px.isMajority(count)
 }
 
-func (px *Paxos) Decision(seq int) {
+func (px *Paxos) Decision(seq int, V interface{}) {
   ins := px.insMap[seq]
 
-  ins.V = ins.tmpV
+  ins.V = V
 
   args := &DecisionArgs{}
   args.Seq = ins.Seq
@@ -352,20 +365,21 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
     px.MakeInstance(seq, v)
   }
 
+  ins := px.insMap[seq]
   reply.OK = false
 
-  if num > px.maxpre {
+  if num > ins.Maxpre {
     
-    px.maxpre = num  
+    ins.Maxpre = num  
     // accept
     reply.OK = true
      
-    if px.maxapt == "" {
+    if ins.Maxapt == "" {
       //init peer
       reply.V = v
     } else {
-      reply.Maxapt = px.maxapt 
-      reply.V = px.v
+      reply.Maxapt = ins.Maxapt 
+      reply.V = ins.Maxaptv
     }      
     DPrintf("[INFO] %d prepare handle %s ...\n", px.me, num)
   } else {
@@ -387,14 +401,21 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
   num := args.Num
   v := args.V
 
+  _, ok := px.insMap[seq]
+  if ok == false {
+    px.MakeInstance(seq, v)
+  }
+
+  ins := px.insMap[seq]
+
   reply.Num = args.Num
   reply.OK = false
  
-  if num >= px.maxpre {
+  if num >= ins.Maxpre {
     
-    px.maxpre = num
-    px.maxapt = num
-    px.v = v
+    ins.Maxapt = num
+    ins.Maxaptv = v
+  
     reply.OK = true
 
     px.insMap[seq].V = v
@@ -413,6 +434,11 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     decided := args.Decided
     num := args.Num
     peer := args.Me
+    v := args.V
+    _, ok := px.insMap[seq]
+    if ok == false {
+      px.MakeInstance(seq, v)
+    }
 
     ins := px.insMap[seq]
     DPrintf("[INFO] %d Change %d V from %s to %s ...\n",px.me, seq, ins.V, args.V)
@@ -551,8 +577,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 
 
   // Your initialization code here.
-  px.maxpre = ""
-  px.maxapt = ""
+
   px.insMap = make(map[int]*Instance)
 
   px.done = make([]int, len(peers))

@@ -41,6 +41,7 @@ type KVPaxos struct {
 
 func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
   // Your code here.
+  
   return nil
 }
 
