@@ -32,7 +32,7 @@ import "math/rand"
 import "strconv"
 
 // Debugging
-const Debug = 0
+const Debug = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -167,7 +167,7 @@ func (px *Paxos) doProposer(seq int) {
 func (px *Paxos) Prepare(seq int) (bool, [] string, interface{}){
   ins := px.insMap[seq]
   ins.Num = px.Generate() 
-  DPrintf("[INFO] Init %d %s ...\n", ins.Seq, ins.Num)
+  DPrintf("[INFO] Init %d Num %s Value %v ...\n", ins.Seq, ins.Num, ins.V)
 
   args := &PreArgs{}
   args.Seq = ins.Seq
@@ -303,6 +303,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
 
 func (px *Paxos) Decision(seq int, V interface{}) {
   ins := px.insMap[seq]
+  // px.done[px.me] = seq
 
   ins.V = V
 
@@ -430,6 +431,8 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
 }
 
 func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error {
+    px.mu.Lock()
+    defer px.mu.Unlock()
     seq := args.Seq
     decided := args.Decided
     num := args.Num
@@ -441,7 +444,7 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     }
 
     ins := px.insMap[seq]
-    DPrintf("[INFO] %d Change %d V from %s to %s ...\n",px.me, seq, ins.V, args.V)
+    DPrintf("[INFO] %d Change %d V from %v to %v ...\n",px.me, seq, ins.V, args.V)
     ins.V = args.V // ?
 
     ins.OK = decided
@@ -482,9 +485,9 @@ func (px *Paxos) Done(seq int) {
 func (px *Paxos) Max() int {
   // Your code here.
   max := 0
-  for k, _ := range px.insMap {
-    if k > max{
-      max = k
+  for _, ins := range px.insMap {
+    if ins.Seq > max{
+      max = ins.Seq
     }
   }
   return max
