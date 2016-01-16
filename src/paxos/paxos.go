@@ -163,10 +163,10 @@ func (px *Paxos) Start(seq int, v interface{}) {
 
 func (px *Paxos) doProposer(seq int, v interface{}) {
   for {
-    DPrintf("[INFO] %d Start Proposer ..\n", px.me)
+    DPrintf("[INFO] %d Start Proposer ...\n", px.me)
 
     ok, acceptors, V := px.Prepare(seq, v)
-
+    DPrintf("[INFO] maxV %v ...\n", V)
     if ok == true {
       ok = px.Accept(seq, acceptors, V)
     }
@@ -183,17 +183,17 @@ func (px *Paxos) doProposer(seq int, v interface{}) {
 func (px *Paxos) Prepare(seq int, v interface{}) (bool, [] string, interface{}){
   ins := px.insMap[seq]
   ins.Num = px.Generate() 
-  DPrintf("[INFO] Init %d Num %s Value %v ...\n", ins.Seq, ins.Num, ins.V)
+  DPrintf("[INFO] Init %d Num %s Value ...\n", ins.Seq, ins.Num)
 
   args := &PreArgs{}
   args.Seq = ins.Seq
-  args.V = ins.V
+  args.V = v
   args.Num = ins.Num
 
   acceptors := make([]string, 0)
   count := 0
   maxN := ""
-  maxV := ins.V
+  maxV := v
 
   for i, peer := range px.peers {
     px.prepareDone.Add(1)
@@ -236,7 +236,7 @@ func (px *Paxos) Prepare(seq int, v interface{}) (bool, [] string, interface{}){
   
           px.mu.Lock()
           
-          if reply.Maxapt > maxN {
+          if reply.Maxapt > maxN && maxV != nil{
             maxN = reply.Maxapt
             maxV = reply.V
           } 
@@ -474,9 +474,14 @@ func (px *Paxos) Generate() string {
 // see the comments for Min() for more explanation.
 //
 func (px *Paxos) Done(seq int) {
-  
-  if seq > px.done[px.me] {
-    px.done[px.me] = seq
+  px.done[px.me] = seq
+
+  min := px.Min()
+
+  for _, seq := range px.done {
+    if seq < min {
+      delete(px.insMap, seq)
+    }
   }
 }
 
