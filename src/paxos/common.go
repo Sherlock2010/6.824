@@ -1,5 +1,9 @@
 package paxos
 
+import "time"
+
+const Interval = time.Millisecond * 100
+
 type Instance struct {
 	Seq int
 	Num string // unique number, ascending order with time

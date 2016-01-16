@@ -32,7 +32,7 @@ import "math/rand"
 import "strconv"
 
 // Debugging
-const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -116,13 +116,18 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 
 func atMostOnce(srv string, name string, args interface{}, reply interface{}) {
   ok := call(srv, name, args, reply)
+  count := 0
 
-  for ok == false {
-    // DPrintf("[Err] Call %s %s Fail ...\n", srv, name)
+  for ok == false && count < 5 {
+    DPrintf("[Err] Call %s %s Fail ...\n", srv, name)
+
+    time.Sleep(Interval)
+    
     ok = call(srv, name, args, reply)
+    count ++
   }
 
-  // DPrintf("[Succ] Call %s %s Succ ...\n", srv, name)
+  DPrintf("[Succ] Call %s %s Succ ...\n", srv, name)
 }
 
 
