@@ -122,7 +122,7 @@ func atMostOnce(srv string, name string, args interface{}, reply interface{}) {
   for ok == false && count < 5 {
     DPrintf("[Err] Call %s %s Fail ...\n", srv, name)
 
-    time.Sleep(Interval)
+    time.Sleep(RPCInterval)
     
     ok = call(srv, name, args, reply)
     count ++
@@ -176,7 +176,8 @@ func (px *Paxos) doProposer(seq int, v interface{}) {
 
       break
     }
-    
+
+    time.Sleep(ProposalInterval) 
   }
   DPrintf("[INFO] %d End Proposer ...\n", px.me)
 }
@@ -257,7 +258,7 @@ func (px *Paxos) Prepare(seq int, v interface{}) (bool, [] string, interface{}){
 
   // wait until add rpc finish
   px.prepareDone.Wait()
-  DPrintf("[INFO] %d receive prepare count %d ...\n", px.me, count)
+  DPrintf("[INFO] %d receive Num %s prepare count %d ...\n", px.me, ins.Num, count)
   return px.isMajority(count), acceptors, maxV
 }
 
@@ -296,8 +297,6 @@ func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
         DPrintf("[INFO] %d sent %d Num %s accept to %s ...\n", px.me, i, ins.Num, peer)
     
         atMostOnce(peer, "Paxos.AcceptHandler", args, &reply)
-
-        DPrintf("[Succ] Call AcceptHandler to %s Succ ...\n", peer)
         
         px.acceptDone.Done()
         if reply.OK == true {
@@ -310,7 +309,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
 
   }
   px.acceptDone.Wait()
-  DPrintf("[INFO] %d receive accept count %d ...\n", px.me, count)
+  DPrintf("[INFO] %d receive Num %s accept count %d ...\n", px.me, ins.Num, count)
   return px.isMajority(count)
 }
 
@@ -382,7 +381,7 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
   ins := px.insMap[seq]
   reply.OK = false
 
-  if num > ins.Maxpre {
+  if num >= ins.Maxpre {
     
     ins.Maxpre = num  
     // accept
@@ -398,7 +397,7 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
     DPrintf("[INFO] %d prepare handle %s ...\n", px.me, num)
   } else {
     // reject  
-    DPrintf("[INFO] %d prepare reject %s ...\n", px.me, num)
+    DPrintf("[INFO] %d prepare reject %s, Maxpre %s ...\n", px.me, num, ins.Maxpre)
   }
   
   return nil
@@ -438,7 +437,7 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
     DPrintf("[INFO] %d accept handle %s ...\n", px.me, num)
   } else {
     
-    DPrintf("[INFO] %d accept reject %s ...\n", px.me, num)
+    DPrintf("[INFO] %d accept reject %s, Maxpre %s ...\n", px.me, num, ins.Maxpre)
   }
   
   return nil
