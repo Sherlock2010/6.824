@@ -32,7 +32,7 @@ import "math/rand"
 import "strconv"
 
 // Debugging
-const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -202,9 +202,11 @@ func (px *Paxos) Prepare(seq int, v interface{}) (bool, [] string, interface{}){
 
     if i == px.me {
       var reply PreReply
-      go func(args *PreArgs, reply *PreReply) {
+      reply.OK = false
+
+      go func(peer string, args *PreArgs, reply *PreReply) {
         // call local prepare
-        DPrintf("[INFO] %d sent prepare to %s ...\n", px.me, peer)
+        DPrintf("[INFO] %d sent Num %s prepare to %s, reply OK %t ...\n", px.me, ins.Num, peer, reply.OK)
 
         px.PrepareHandler(args, reply)
 
@@ -221,13 +223,14 @@ func (px *Paxos) Prepare(seq int, v interface{}) (bool, [] string, interface{}){
           
           px.mu.Unlock()
         }
-      }(args, &reply)
+      }(peer, args, &reply)
       
     } else {
       var reply PreReply
+      // reply.OK = false
       go func(peer string, args *PreArgs, reply *PreReply) {
         // call remote prepare
-        DPrintf("[INFO] %d sent Num %s prepare to %s ...\n", px.me, ins.Num, peer)
+        DPrintf("[INFO] %d sent Num %s prepare to %s, reply OK %t...\n", px.me, ins.Num, peer, reply.OK)
         
         atMostOnce(peer, "Paxos.PrepareHandler", args, &reply)
 
@@ -271,11 +274,11 @@ func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
 
   for i, peer := range acceptors {
     px.acceptDone.Add(1)
-
-    if i == px.me {
+    DPrintf("[INFO] %d pre %d sent Num %s accept to %s ...\n", px.me, i, ins.Num, peer)
+    if peer == px.peers[px.me] {
       var reply AcceptReply
       go func (args *AcceptArgs, reply *AcceptReply) {
-        DPrintf("[INFO] %d sent Num %s accept to %s ...\n", px.me, ins.Num, peer)
+        DPrintf("[INFO] %d sent %d Num %s accept to %s ...\n", px.me, i, ins.Num, peer)
         
         px.AcceptHandler(args, reply)
 
@@ -290,7 +293,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
       var reply AcceptReply
       go func(peer string, args *AcceptArgs, reply *AcceptReply) {
         // accept   
-        DPrintf("[INFO] %d sent accept to %s ...\n", px.me, peer)
+        DPrintf("[INFO] %d sent %d Num %s accept to %s ...\n", px.me, i, ins.Num, peer)
     
         atMostOnce(peer, "Paxos.AcceptHandler", args, &reply)
 
@@ -341,7 +344,7 @@ func (px *Paxos) Decision(seq int, V interface{}) {
       }(args, &reply)
       
     } else {
-      DPrintf("[INFO] %d sent decision %s to %s ...\n", px.me, args.Num, peer)
+      DPrintf("[INFO] %d sent Num %s decision %s to %s ...\n", px.me, ins.Num, args.Num, peer)
 
       go func(peer string, args *DecisionArgs, reply *DecisionReply) {
 
