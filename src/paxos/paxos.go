@@ -58,6 +58,7 @@ type Paxos struct {
 
   insMap map[int]*Instance
   done []int
+  seq int
 }
 
 func (px *Paxos) MakeInstance(seq int) {
@@ -159,6 +160,7 @@ func (px *Paxos) Start(seq int, v interface{}) {
     go px.doProposer(seq, v)
 
   }
+  px.seq += len(px.peers)
 
 }
 
@@ -601,7 +603,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
   px.peers = peers
   px.me = me
 
-
+  px.seq = me
   // Your initialization code here.
 
   px.insMap = make(map[int]*Instance)

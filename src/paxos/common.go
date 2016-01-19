@@ -3,7 +3,7 @@ package paxos
 import "time"
 
 const RPCInterval = time.Millisecond * 100
-const ProposalInterval = time.Millisecond * 500
+const ProposalInterval = time.Millisecond * 1000
 
 type Instance struct {
 	Seq int

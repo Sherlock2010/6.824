@@ -25,6 +25,19 @@ type Op struct {
   // Your definitions here.
   // Field names must start with capital letters,
   // otherwise RPC will break.
+  Type Type
+  // PutArgs or GetArgs
+  Value interface{} 
+}
+
+func (kv *KVPaxos) MakeOp(tp Type, v interface{}) Op {
+  // init op
+  var op Op
+  
+  op.Type = tp
+  op.Value = v
+  
+  return op
 }
 
 type KVPaxos struct {
@@ -36,19 +49,87 @@ type KVPaxos struct {
   px *paxos.Paxos
 
   // Your definitions here.
+  done sync.WaitGroup
+  database map[string]string
 }
 
 
 func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
   // Your code here.
-  
+
+  // process request before
+  done.Wait()
+  key := args.key
+  value := kv.database[key]
+
+  reply.Value = value
+  reply.Err = OK
   return nil
 }
 
 func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
   // Your code here.
+  reply.Err = Nil
+
+  seq := px.seq
+  op := MakeOp(Put, args)
+  px.Start(seq, op)
+
+  to := 10 * time.Millisecond
+  for {
+    decided, _ := kv.px.Status(seq)
+    if decided {
+      kv.Process(seq)
+      break
+    }
+
+    time.Sleep(to)
+    if to < 10 * time.Second {
+      to *= 2
+    }
+  }
 
   return nil
+}
+
+func (kv *KVPaxos) Process(seq) {
+  px := kv.px
+  done.Add(1)
+  for _, ins := range px.instances {
+
+    if ins.Seq < seq && ins.OK {
+      args, err := ins.Value.(PutArgs)
+      if err {
+        log.Fatal("Process: ", err);
+      }
+
+      doHash := args.DoHash
+      key := args.key
+      value := args.Value
+    
+      if doHash {
+        previousValue := ""
+        previousValue, ok := pb.db[key]
+            
+        if ok == true {
+          newValue := hash(previousValue + value)
+          kv.database[key] = strconv.Itoa(int(newValue))
+        }
+    
+        reply.PreviousValue = previousValue
+    
+        reply.Err = OK
+    
+      } else {
+        kv.database[key] = value
+    
+        reply.Err = OK
+      }
+    }
+  }
+
+  done.Done()
+
 }
 
 // tell the server to shut itself down.

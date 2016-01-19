@@ -3,10 +3,18 @@ package kvpaxos
 import "hash/fnv"
 
 const (
+  Nil = "Nil"
   OK = "OK"
   ErrNoKey = "ErrNoKey"
 )
+
+const (
+  Put = "Put"
+  Get = "Get"
+)
+
 type Err string
+type Type string
 
 type PutArgs struct {
   // You'll have to add definitions here.
@@ -38,3 +46,6 @@ func hash(s string) uint32 {
   h.Write([]byte(s))
   return h.Sum32()
 }
+
+
+

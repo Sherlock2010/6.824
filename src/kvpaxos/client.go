@@ -2,6 +2,7 @@ package kvpaxos
 
 import "net/rpc"
 import "fmt"
+import "math/rand"
 
 type Clerk struct {
   servers []string
@@ -49,6 +50,28 @@ func call(srv string, rpcname string,
   return false
 }
 
+func atMostOnce(srv string, name string, args interface{}, reply interface{}) {
+  ok := call(srv, name, args, reply)
+  count := 0
+
+  for ok == false && count < 5 {
+    DPrintf("[Err] Call %s %s Fail ...\n", srv, name)
+
+    time.Sleep(RPCInterval)
+    
+    ok = call(srv, name, args, reply)
+    count ++
+  }
+
+  DPrintf("[Succ] Call %s %s Succ ...\n", srv, name)
+}
+
+func (ck *Clerk) pick() int {
+  ci := (rand.Int() % len(ck.servers)
+
+  return ci
+}
+
 //
 // fetch the current value for a key.
 // returns "" if the key does not exist.
@@ -56,7 +79,24 @@ func call(srv string, rpcname string,
 //
 func (ck *Clerk) Get(key string) string {
   // You will have to modify this function.
-  return ""
+  args = &GetArgs{}
+  var reply GetReply
+  
+  ci := ck.pick()
+  server := ck.servers[ci]
+
+  //at most once 
+  sent = false
+  for !sent {
+   
+    sent = true
+    received := call(server, "server.Get", args, reply)
+    // wait for acknowledgement with timeout
+    if received && (reply.OK != OK) :
+      sent = false
+  }
+      
+  return reply.Value
 }
 
 //
@@ -65,7 +105,24 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
   // You will have to modify this function.
-  return ""
+  args = &PutArgs{}
+  var reply PutReply
+  
+  ci := ck.pick()
+  server := ck.servers[ci]
+
+  //at most once 
+  sent = false
+  for !sent {
+   
+    sent = true
+    received := call(server, "server.Put", args, reply)
+    // wait for acknowledgement with timeout
+    if received && (reply.OK != OK) :
+      sent = false
+  }
+
+  return reply.PreviousValue
 }
 
 func (ck *Clerk) Put(key string, value string) {
