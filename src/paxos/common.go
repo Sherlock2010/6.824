@@ -13,7 +13,7 @@ type Instance struct {
 	Maxpre string // highest prepare num seen
   	Maxapt string // highest accept num seen
   	Maxaptv interface{} // highest accept value seen
-
+  	Done bool
 	OK bool // whether application agree to the instance
 }
 

@@ -56,9 +56,10 @@ type Paxos struct {
   acceptDone sync.WaitGroup
   decisionDone sync.WaitGroup
 
-  insMap map[int]*Instance
+  InsMap map[int]*Instance
   done []int
-  seq int
+  Seqs []int
+  Seq int // proposal seq
 }
 
 func (px *Paxos) MakeInstance(seq int) {
@@ -73,8 +74,8 @@ func (px *Paxos) MakeInstance(seq int) {
   ins.Maxaptv = nil
 
   ins.OK = false
-  
-  px.insMap[seq] = ins
+
+  px.InsMap[seq] = ins
   
 
 }
@@ -150,7 +151,7 @@ func (px *Paxos) isMajority(n int) bool {
 func (px *Paxos) Start(seq int, v interface{}) {
   // Act as proposer to a instance
 
-  _, ok := px.insMap[seq]    
+  _, ok := px.InsMap[seq]    
 
   if ok == false {
     // init instance
@@ -160,7 +161,8 @@ func (px *Paxos) Start(seq int, v interface{}) {
     go px.doProposer(seq, v)
 
   }
-  px.seq += len(px.peers)
+  
+  px.Seq += len(px.peers)
 
 }
 
@@ -185,7 +187,7 @@ func (px *Paxos) doProposer(seq int, v interface{}) {
 }
 
 func (px *Paxos) Prepare(seq int, v interface{}) (bool, [] string, interface{}){
-  ins := px.insMap[seq]
+  ins := px.InsMap[seq]
   ins.Num = px.Generate() 
   DPrintf("[INFO] %d Init %d Num %s Value %v ...\n", px.me, ins.Seq, ins.Num, v)
 
@@ -266,7 +268,7 @@ func (px *Paxos) Prepare(seq int, v interface{}) (bool, [] string, interface{}){
 
 func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
 
-  ins := px.insMap[seq]
+  ins := px.InsMap[seq]
 
   args := &AcceptArgs{}
   args.Seq = ins.Seq
@@ -304,7 +306,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
         if reply.OK == true {
           count ++
         }
-        // px.insMap[seq].OK = reply.OK
+        // px.InsMap[seq].OK = reply.OK
       
       }(peer, args, &reply)
     }
@@ -317,7 +319,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
 
 func (px *Paxos) Decision(seq int, V interface{}) {
   DPrintf("[INFO] %d try get seq %d ...\n", px.me, seq)
-  ins, ok := px.insMap[seq]
+  ins, ok := px.InsMap[seq]
   if ok == false {
     DPrintf("[INFO] %d ins seq %d not exist ! ...\n", px.me, seq)
   }
@@ -373,14 +375,14 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
   num := args.Num
   // v := args.V
 
-  _, ok := px.insMap[seq] 
+  _, ok := px.InsMap[seq] 
 
   if ok == false {
     px.MakeInstance(seq)
     DPrintf("[INFO] %d prepare handler create ins %d ...\n", px.me, seq)
   }
 
-  ins := px.insMap[seq]
+  ins := px.InsMap[seq]
   reply.OK = false
 
   if num >= ins.Maxpre {
@@ -416,13 +418,13 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
   num := args.Num
   v := args.V
 
-  _, ok := px.insMap[seq]
+  _, ok := px.InsMap[seq]
   if ok == false {
     px.MakeInstance(seq)
     DPrintf("[INFO] %d accepthandler create ins %d ...\n", px.me, seq)
   }
 
-  ins := px.insMap[seq]
+  ins := px.InsMap[seq]
 
   reply.Num = args.Num
   reply.OK = false
@@ -434,8 +436,8 @@ func (px *Paxos) AcceptHandler(args *AcceptArgs, reply *AcceptReply) error {
   
     reply.OK = true
 
-    px.insMap[seq].V = v
-    // px.insMap[seq].OK = true
+    px.InsMap[seq].V = v
+    // px.InsMap[seq].OK = true
     DPrintf("[INFO] %d accept handle %s ...\n", px.me, num)
   } else {
     
@@ -453,17 +455,18 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     num := args.Num
     peer := args.Me
     v := args.V
-    _, ok := px.insMap[seq]
+    _, ok := px.InsMap[seq]
     if ok == false {
       px.MakeInstance(seq)
       DPrintf("[INFO] %d decisionhandler create ins %d ...\n", px.me, seq)
     }
 
-    ins := px.insMap[seq]
+    ins := px.InsMap[seq]
     DPrintf("[INFO] %d Change %d V from %v to %v ...\n",px.me, seq, ins.V, args.V)
     ins.V = v // ?
-
+    
     ins.OK = decided
+    px.Seqs = append(px.Seqs, seq)
 
     px.done[peer] = args.MaxDone
     reply.MaxDone = px.done[px.me]
@@ -501,7 +504,7 @@ func (px *Paxos) Done(seq int) {
 func (px *Paxos) Max() int {
   // Your code here.
   max := 0
-  for _, ins := range px.insMap {
+  for _, ins := range px.InsMap {
     if ins.Seq > max{
       max = ins.Seq
     }
@@ -547,11 +550,11 @@ func (px *Paxos) Min() int {
     }
   }
   // fmt.Printf("[INFO] %d Min %d ...\n", px.me, min)
-  for seq, ins := range px.insMap {
+  for seq, ins := range px.InsMap {
     
     if ins.Seq < min && ins.OK {
       
-      delete(px.insMap, seq)
+      delete(px.InsMap, seq)
       DPrintf("[INFO] %d delete Seq %d ...\n", px.me, seq)
     }
   }
@@ -568,7 +571,7 @@ func (px *Paxos) Min() int {
 //
 func (px *Paxos) Status(seq int) (bool, interface{}) {
   
-  ins, ok := px.insMap[seq]
+  ins, ok := px.InsMap[seq]
 
   if ok == true {
     
@@ -603,10 +606,11 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
   px.peers = peers
   px.me = me
 
-  px.seq = me
   // Your initialization code here.
+  px.Seq = me
+  px.Seqs = make([]int, 0)
 
-  px.insMap = make(map[int]*Instance)
+  px.InsMap = make(map[int]*Instance)
 
   px.done = make([]int, len(peers))
   for i := range peers{

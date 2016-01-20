@@ -50,24 +50,8 @@ func call(srv string, rpcname string,
   return false
 }
 
-func atMostOnce(srv string, name string, args interface{}, reply interface{}) {
-  ok := call(srv, name, args, reply)
-  count := 0
-
-  for ok == false && count < 5 {
-    DPrintf("[Err] Call %s %s Fail ...\n", srv, name)
-
-    time.Sleep(RPCInterval)
-    
-    ok = call(srv, name, args, reply)
-    count ++
-  }
-
-  DPrintf("[Succ] Call %s %s Succ ...\n", srv, name)
-}
-
 func (ck *Clerk) pick() int {
-  ci := (rand.Int() % len(ck.servers)
+  ci := (rand.Int() % len(ck.servers))
 
   return ci
 }
@@ -79,21 +63,24 @@ func (ck *Clerk) pick() int {
 //
 func (ck *Clerk) Get(key string) string {
   // You will have to modify this function.
-  args = &GetArgs{}
+  args := &GetArgs{}
+  args.Key = key
+  
   var reply GetReply
   
   ci := ck.pick()
   server := ck.servers[ci]
 
   //at most once 
-  sent = false
+  sent := false
   for !sent {
    
     sent = true
-    received := call(server, "server.Get", args, reply)
+    received := call(server, "KVPaxos.Get", args, reply)
     // wait for acknowledgement with timeout
-    if received && (reply.OK != OK) :
+    if received && (reply.Err != OK) {
       sent = false
+    }
   }
       
   return reply.Value
@@ -105,21 +92,27 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
   // You will have to modify this function.
-  args = &PutArgs{}
+  args := &PutArgs{}
+
+  args.Key = key
+  args.Value = value
+  args.DoHash = dohash
+
   var reply PutReply
   
   ci := ck.pick()
   server := ck.servers[ci]
 
   //at most once 
-  sent = false
+  sent := false
   for !sent {
    
     sent = true
-    received := call(server, "server.Put", args, reply)
+    received := call(server, "KVPaxos.Put", args, reply)
     // wait for acknowledgement with timeout
-    if received && (reply.OK != OK) :
+    if received && (reply.Err != OK) {
       sent = false
+    }
   }
 
   return reply.PreviousValue

@@ -10,8 +10,10 @@ import "os"
 import "syscall"
 import "encoding/gob"
 import "math/rand"
+import "time"
+import "strconv"
 
-const Debug=0
+const Debug = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -57,29 +59,19 @@ type KVPaxos struct {
 func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
   // Your code here.
 
-  // process request before
-  done.Wait()
-  key := args.key
-  value := kv.database[key]
-
-  reply.Value = value
-  reply.Err = OK
-  return nil
-}
-
-func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
-  // Your code here.
   reply.Err = Nil
+  px := kv.px
 
-  seq := px.seq
-  op := MakeOp(Put, args)
-  px.Start(seq, op)
+  seq := px.Seq
+  op := kv.MakeOp(Get, *args)
+  kv.px.Start(seq, op)
 
   to := 10 * time.Millisecond
   for {
     decided, _ := kv.px.Status(seq)
     if decided {
-      kv.Process(seq)
+      getReply := kv.Process(seq)
+      reply = getReply.(*GetReply)
       break
     }
 
@@ -92,45 +84,105 @@ func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
   return nil
 }
 
-func (kv *KVPaxos) Process(seq) {
+func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
+  // Your code here.
+  reply.Err = Nil
   px := kv.px
-  done.Add(1)
-  for _, ins := range px.instances {
 
-    if ins.Seq < seq && ins.OK {
-      args, err := ins.Value.(PutArgs)
-      if err {
-        log.Fatal("Process: ", err);
-      }
+  seq := px.Seq
+  op := kv.MakeOp(Put, *args)
+  kv.px.Start(seq, op)
 
-      doHash := args.DoHash
-      key := args.key
-      value := args.Value
-    
-      if doHash {
-        previousValue := ""
-        previousValue, ok := pb.db[key]
-            
-        if ok == true {
-          newValue := hash(previousValue + value)
-          kv.database[key] = strconv.Itoa(int(newValue))
-        }
-    
-        reply.PreviousValue = previousValue
-    
-        reply.Err = OK
-    
-      } else {
-        kv.database[key] = value
-    
-        reply.Err = OK
-      }
+  to := 10 * time.Millisecond
+  for {
+    decided, _ := kv.px.Status(seq)
+    if decided {
+      putReply := kv.Process(seq)
+      reply = putReply.(*PutReply)
+      break
+    }
+
+    time.Sleep(to)
+    if to < 10 * time.Second {
+      to *= 2
     }
   }
 
-  done.Done()
-
+  return nil
 }
+
+func (kv *KVPaxos) Process(seq int) interface{} {
+ 
+  ins, ok := kv.px.InsMap[seq]
+  if ok == false {
+      log.Fatal("Key Err: Seq ", seq);
+  }
+  
+  op, ok := ins.V.(Op)     
+  if ok == false {
+    log.Fatal("Type Err")
+  } 
+
+  switch op.Type {
+
+    case Put : {
+      args, ok := op.Value.(PutArgs)
+
+      if ok == false {
+        log.Fatal("Type Err")
+      } 
+          
+      doHash := args.DoHash
+      key := args.Key
+      value := args.Value
+    
+      DPrintf("[INFO] %d Process Key:%s, Value:%s ...\n", kv.me, key, value)
+      reply := &PutReply{}
+      if doHash {
+    
+        previousValue := ""
+        _, ok := kv.database[key]
+                  
+        if ok == true {
+          previousValue = kv.database[key]
+        }
+      
+        newValue := hash(previousValue + value)
+        kv.database[key] = strconv.Itoa(int(newValue))
+      
+        reply.PreviousValue = previousValue
+        reply.Err = OK
+      
+        DPrintf("[INFO] %d PutHash, key:%s, value:%s ...\n", kv.me, key, value)
+        DPrintf("[INFO] %d PutHash, previousValue:%v, newValue:%v ...\n ", kv.me, previousValue, newValue)
+        
+      } else {
+        kv.database[key] = value
+        DPrintf("[INFO] %d Put, key:%s, value:%s ...\n", kv.me, key, kv.database[key])
+        reply.Err = OK
+      }
+
+      return reply
+    }
+    case Get : {
+      args, ok := op.Value.(GetArgs)
+      reply := &GetReply{}
+      if ok == false {
+        log.Fatal("Type Err")
+      } 
+          
+      key := args.Key
+
+      reply.Value = kv.database[key]
+      reply.Err = OK
+
+      return reply
+    }
+  }
+
+  return nil
+}
+
 
 // tell the server to shut itself down.
 // please do not change this function.
@@ -151,11 +203,16 @@ func StartServer(servers []string, me int) *KVPaxos {
   // call gob.Register on structures you want
   // Go's RPC library to marshall/unmarshall.
   gob.Register(Op{})
+  gob.Register(PutArgs{})
+  gob.Register(GetArgs{})
+  gob.Register(PutReply{})
+  gob.Register(GetReply{})
 
   kv := new(KVPaxos)
   kv.me = me
 
   // Your initialization code here.
+  kv.database = make(map[string]string)
 
   rpcs := rpc.NewServer()
   rpcs.Register(kv)
