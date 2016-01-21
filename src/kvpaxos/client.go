@@ -70,19 +70,19 @@ func (ck *Clerk) Get(key string) string {
   
   ci := ck.pick()
   server := ck.servers[ci]
-
+  DPrintf("[INFO] Get %d key:%s ...\n", ci, key)
   //at most once 
   sent := false
   for !sent {
-   
+
     sent = true
-    received := call(server, "KVPaxos.Get", args, reply)
+    received := call(server, "KVPaxos.Get", args, &reply)
     // wait for acknowledgement with timeout
     if received && (reply.Err != OK) {
       sent = false
     }
   }
-      
+
   return reply.Value
 }
 
@@ -102,13 +102,13 @@ func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
   
   ci := ck.pick()
   server := ck.servers[ci]
-
+  DPrintf("[INFO] Put %d key:%s, Value:%s, DoHash:%t ...\n", ci, key, value, dohash)
   //at most once 
   sent := false
   for !sent {
    
     sent = true
-    received := call(server, "KVPaxos.Put", args, reply)
+    received := call(server, "KVPaxos.Put", args, &reply)
     // wait for acknowledgement with timeout
     if received && (reply.Err != OK) {
       sent = false

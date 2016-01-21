@@ -74,6 +74,7 @@ func (px *Paxos) MakeInstance(seq int) {
   ins.Maxaptv = nil
 
   ins.OK = false
+  ins.Done = false
 
   px.InsMap[seq] = ins
   
@@ -467,7 +468,7 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     
     ins.OK = decided
     px.Seqs = append(px.Seqs, seq)
-
+    DPrintf("[INFO] %d Seqs %v ...\n", px.me, px.Seqs)
     px.done[peer] = args.MaxDone
     reply.MaxDone = px.done[px.me]
 

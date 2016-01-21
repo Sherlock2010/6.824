@@ -13,7 +13,7 @@ import "math/rand"
 import "time"
 import "strconv"
 
-const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -64,14 +64,25 @@ func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
 
   seq := px.Seq
   op := kv.MakeOp(Get, *args)
+  DPrintf("[INFO] Get Paxos seq %d, %v ...\n", seq, *args)
   kv.px.Start(seq, op)
 
   to := 10 * time.Millisecond
   for {
     decided, _ := kv.px.Status(seq)
     if decided {
-      getReply := kv.Process(seq)
-      reply = getReply.(*GetReply)
+      // process paxos log seq < seq
+      kv.Process(seq)
+
+      // process paxos log seq = seq
+      
+      key := args.Key
+      value := kv.database[key]
+
+      reply.Value = value
+      reply.Err = OK   
+
+      kv.px.InsMap[seq].Done = true 
       break
     }
 
@@ -92,13 +103,39 @@ func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
   seq := px.Seq
   op := kv.MakeOp(Put, *args)
   kv.px.Start(seq, op)
-
+  DPrintf("[INFO] Put Paxos seq %d, %v ...\n", seq, *args)
   to := 10 * time.Millisecond
   for {
     decided, _ := kv.px.Status(seq)
     if decided {
-      putReply := kv.Process(seq)
-      reply = putReply.(*PutReply)
+      key := args.Key
+      value := args.Value
+      doHash := args.DoHash
+      if doHash {
+        // precess paxos log seq < seq
+        kv.Process(seq)
+
+        // precess paxos log seq = seq
+        previousValue := ""
+
+        _, ok := kv.database[key]
+                      
+        if ok == true {
+          previousValue = kv.database[key]
+        }
+          
+        newValue := hash(previousValue + value)
+        kv.database[key] = strconv.Itoa(int(newValue))
+
+        reply.PreviousValue = previousValue
+        reply.Err = OK  
+
+        kv.px.InsMap[seq].Done = true  
+      } else {
+        reply.PreviousValue = ""
+        reply.Err = OK
+      }
+
       break
     }
 
@@ -111,76 +148,74 @@ func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
   return nil
 }
 
-func (kv *KVPaxos) Process(seq int) interface{} {
- 
-  ins, ok := kv.px.InsMap[seq]
-  if ok == false {
-      log.Fatal("Key Err: Seq ", seq);
-  }
+func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
   
-  op, ok := ins.V.(Op)     
-  if ok == false {
-    log.Fatal("Type Err")
-  } 
+  N := kv.px.InsMap[curseq].Num
 
-  switch op.Type {
+  for _, seq := range kv.px.Seqs {
+    ins :=kv.px.InsMap[seq] 
+    DPrintf("[INFO] %d Prepare Execute Seq %d %v %t...\n", kv.me, seq, ins.V, ins.Done)
 
-    case Put : {
-      args, ok := op.Value.(PutArgs)
+    if ins.Num < N && ins.OK && !ins.Done{
+      op, ok := ins.V.(Op)
 
       if ok == false {
-        log.Fatal("Type Err")
+        DPrintf("Type Err ...\n")
       } 
-          
-      doHash := args.DoHash
-      key := args.Key
-      value := args.Value
-    
-      DPrintf("[INFO] %d Process Key:%s, Value:%s ...\n", kv.me, key, value)
-      reply := &PutReply{}
-      if doHash {
-    
-        previousValue := ""
-        _, ok := kv.database[key]
-                  
-        if ok == true {
-          previousValue = kv.database[key]
-        }
-      
-        newValue := hash(previousValue + value)
-        kv.database[key] = strconv.Itoa(int(newValue))
-      
-        reply.PreviousValue = previousValue
-        reply.Err = OK
-      
-        DPrintf("[INFO] %d PutHash, key:%s, value:%s ...\n", kv.me, key, value)
-        DPrintf("[INFO] %d PutHash, previousValue:%v, newValue:%v ...\n ", kv.me, previousValue, newValue)
+  
+      switch op.Type {
         
-      } else {
-        kv.database[key] = value
-        DPrintf("[INFO] %d Put, key:%s, value:%s ...\n", kv.me, key, kv.database[key])
-        reply.Err = OK
-      }
-
-      return reply
-    }
-    case Get : {
-      args, ok := op.Value.(GetArgs)
-      reply := &GetReply{}
-      if ok == false {
-        log.Fatal("Type Err")
-      } 
+        case Put : {
+          args, ok := op.Value.(PutArgs)
+    
+          if ok == false {
+            log.Fatal("Type Err")
+          } 
+              
+          doHash := args.DoHash
+          key := args.Key
+          value := args.Value
           
-      key := args.Key
+          if doHash {
+        
+            previousValue := ""
+            _, ok := kv.database[key]
+                      
+            if ok == true {
+              previousValue = kv.database[key]
+            }
+          
+            newValue := hash(previousValue + value)
+            kv.database[key] = strconv.Itoa(int(newValue))
+          
+            DPrintf("[INFO] %d PutHash, Seq %d, key:%s, value:%s ...\n", kv.me, ins.Seq, key, value)
+            DPrintf("[INFO] %d PutHash, Seq %d, previousValue:%v, newValue:%v ...\n ", kv.me, ins.Seq, previousValue, newValue)
+            // return Put, previousValue, OK
+          } else {
+            kv.database[key] = value
+            DPrintf("[INFO] %d Put, Seq %d, key:%s, value:%s ...\n", kv.me, ins.Seq, key, kv.database[key])
 
-      reply.Value = kv.database[key]
-      reply.Err = OK
+          }
+    
+        }
+        case Get : {
+          args, ok := op.Value.(GetArgs)
 
-      return reply
+          if ok == false {
+            DPrintf("Type Err ...\n")
+          } 
+              
+          key := args.Key
+          DPrintf("[INFO] %d Get, Seq %d, key:%s, value:%s ...\n", kv.me, ins.Seq, key, kv.database[key])
+          // return Get, kv.database[key], OK
+        }
+      }
     }
+
+    ins.Done = true
   }
 
-  return nil
+  return Nil, "", Nil
 }
 
 

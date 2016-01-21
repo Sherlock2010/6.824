@@ -6,7 +6,7 @@ import "strconv"
 import "os"
 import "time"
 import "fmt"
-// import "math/rand"
+import "math/rand"
 
 func check(t *testing.T, ck *Clerk, key string, value string) {
   v := ck.Get(key)
@@ -79,37 +79,37 @@ func TestBasic(t *testing.T) {
 
   fmt.Printf("  ... Passed\n")
   
-  // fmt.Printf("2 Test: Concurrent clients ...\n")
+  fmt.Printf("2 Test: Concurrent clients ...\n")
 
-  // for iters := 0; iters < 20; iters++ {
-  //   const npara = 15
-  //   var ca [npara]chan bool
-  //   for nth := 0; nth < npara; nth++ {
-  //     ca[nth] = make(chan bool)
-  //     go func(me int) {
-  //       defer func() { ca[me] <- true }()
-  //       ci := (rand.Int() % nservers)
-  //       myck := MakeClerk([]string{kvh[ci]})
-  //       if (rand.Int() % 1000) < 500 {
-  //         myck.Put("b", strconv.Itoa(rand.Int()))
-  //       } else {
-  //         myck.Get("b")
-  //       }
-  //     }(nth)
-  //   }
-  //   for nth := 0; nth < npara; nth++ {
-  //     <- ca[nth]
-  //   }
-  //   var va [nservers]string
-  //   for i := 0; i < nservers; i++ {
-  //     va[i] = cka[i].Get("b")
-  //     if va[i] != va[0] {
-  //       t.Fatalf("mismatch")
-  //     }
-  //   }
-  // }
+  for iters := 0; iters < 20; iters++ {
+    const npara = 15
+    var ca [npara]chan bool
+    for nth := 0; nth < npara; nth++ {
+      ca[nth] = make(chan bool)
+      go func(me int) {
+        defer func() { ca[me] <- true }()
+        ci := (rand.Int() % nservers)
+        myck := MakeClerk([]string{kvh[ci]})
+        if (rand.Int() % 1000) < 500 {
+          myck.Put("b", strconv.Itoa(rand.Int()))
+        } else {
+          myck.Get("b")
+        }
+      }(nth)
+    }
+    for nth := 0; nth < npara; nth++ {
+      <- ca[nth]
+    }
+    var va [nservers]string
+    for i := 0; i < nservers; i++ {
+      va[i] = cka[i].Get("b")
+      if va[i] != va[0] {
+        t.Fatalf("mismatch")
+      }
+    }
+  }
 
-  // fmt.Printf("  ... Passed\n")
+  fmt.Printf("  ... Passed\n")
 
   time.Sleep(1 * time.Second)
 }
