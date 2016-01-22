@@ -13,7 +13,7 @@ import "math/rand"
 import "time"
 import "strconv"
 
-const Debug = 0
+const Debug = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -156,7 +156,7 @@ func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
 func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
   
   N := kv.px.InsMap[curseq].Num
-
+  
   for iter := kv.px.Seqs.Front();iter != nil ;iter = iter.Next() {
     seq := iter.Value.(int)
 
@@ -219,6 +219,9 @@ func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
           // return Get, kv.database[key], OK
         }
       }
+
+      min := kv.px.Min()
+      kv.px.Done(min)
     }
 
   }

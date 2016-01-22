@@ -33,7 +33,7 @@ import "strconv"
 import "container/list" 
 
 // Debugging
-const Debug = 0
+const Debug = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -320,7 +320,7 @@ func (px *Paxos) Accept(seq int, acceptors [] string, V interface{}) bool{
 }
 
 func (px *Paxos) Decision(seq int, V interface{}) {
-  DPrintf("[INFO] %d try get seq %d ...\n", px.me, seq)
+  // DPrintf("[INFO] %d try get seq %d ...\n", px.me, seq)
   ins, ok := px.InsMap[seq]
   if ok == false {
     DPrintf("[INFO] %d ins seq %d not exist ! ...\n", px.me, seq)
@@ -488,7 +488,7 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
 func (px *Paxos) Insert(seq int) {
   if px.Seqs.Len() > 0 {
     for iter := px.Seqs.Front();iter != nil ;iter = iter.Next() {
-
+      // DPrintf("[INFO] %d Try insert seq %d ...\n", px.me, iter.Value.(int))
       if px.InsMap[iter.Value.(int)].Num > px.InsMap[seq].Num {
         px.Seqs.InsertBefore(seq, iter)
         DPrintf("[INFO] %d insert %d before %d ...\n", px.me, seq, iter.Value)
@@ -587,6 +587,12 @@ func (px *Paxos) Min() int {
     if ins.Seq < min && ins.OK {
       
       delete(px.InsMap, seq)
+      for iter := px.Seqs.Front();iter != nil ;iter = iter.Next() {
+        if iter.Value.(int) == seq {
+          px.Seqs.Remove(iter)
+          break
+        }
+      }
       DPrintf("[INFO] %d delete Seq %d ...\n", px.me, seq)
     }
   }
