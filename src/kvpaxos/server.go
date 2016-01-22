@@ -17,7 +17,8 @@ const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
-    log.Printf(format, a...)
+    // log.Printf(format, a...)
+    n, err = fmt.Printf(format, a...)
   }
   return
 }
@@ -58,19 +59,20 @@ type KVPaxos struct {
 
 func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
   // Your code here.
-
+  kv.mu.Lock()
   reply.Err = Nil
   px := kv.px
 
   seq := px.Seq
   op := kv.MakeOp(Get, *args)
-  DPrintf("[INFO] Get Paxos seq %d, %v ...\n", seq, *args)
+  
   kv.px.Start(seq, op)
 
   to := 10 * time.Millisecond
   for {
     decided, _ := kv.px.Status(seq)
     if decided {
+      DPrintf("[INFO] Get Paxos seq %d, %v ...\n", seq, *args)
       // process paxos log seq < seq
       kv.Process(seq)
 
@@ -91,19 +93,20 @@ func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
       to *= 2
     }
   }
-
+  kv.mu.Unlock()
   return nil
 }
 
 func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
   // Your code here.
+  kv.mu.Lock()
   reply.Err = Nil
   px := kv.px
 
   seq := px.Seq
   op := kv.MakeOp(Put, *args)
   kv.px.Start(seq, op)
-  DPrintf("[INFO] Put Paxos seq %d, %v ...\n", seq, *args)
+  
   to := 10 * time.Millisecond
   for {
     decided, _ := kv.px.Status(seq)
@@ -111,7 +114,9 @@ func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
       key := args.Key
       value := args.Value
       doHash := args.DoHash
+      DPrintf("[INFO] Put Paxos seq %d, %v ...\n", seq, *args)
       if doHash {
+
         // precess paxos log seq < seq
         kv.Process(seq)
 
@@ -144,7 +149,7 @@ func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
       to *= 2
     }
   }
-
+  kv.mu.Unlock()
   return nil
 }
 
@@ -152,9 +157,11 @@ func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
   
   N := kv.px.InsMap[curseq].Num
 
-  for _, seq := range kv.px.Seqs {
+  for iter := kv.px.Seqs.Front();iter != nil ;iter = iter.Next() {
+    seq := iter.Value.(int)
+
     ins :=kv.px.InsMap[seq] 
-    DPrintf("[INFO] %d Prepare Execute Seq %d %v %t...\n", kv.me, seq, ins.V, ins.Done)
+    DPrintf("[INFO] %d Prepare Execute Seq %d %v %t, curseq %d ...\n", kv.me, seq, ins.V, ins.Done, curseq)
 
     if ins.Num < N && ins.OK && !ins.Done{
       op, ok := ins.V.(Op)
@@ -187,12 +194,14 @@ func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
           
             newValue := hash(previousValue + value)
             kv.database[key] = strconv.Itoa(int(newValue))
+            ins.Done = true
           
             DPrintf("[INFO] %d PutHash, Seq %d, key:%s, value:%s ...\n", kv.me, ins.Seq, key, value)
             DPrintf("[INFO] %d PutHash, Seq %d, previousValue:%v, newValue:%v ...\n ", kv.me, ins.Seq, previousValue, newValue)
             // return Put, previousValue, OK
           } else {
             kv.database[key] = value
+            ins.Done = true
             DPrintf("[INFO] %d Put, Seq %d, key:%s, value:%s ...\n", kv.me, ins.Seq, key, kv.database[key])
 
           }
@@ -212,7 +221,6 @@ func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
       }
     }
 
-    ins.Done = true
   }
 
   return Nil, "", Nil

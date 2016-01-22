@@ -30,6 +30,7 @@ import "fmt"
 import "time"
 import "math/rand"
 import "strconv"
+import "container/list" 
 
 // Debugging
 const Debug = 0
@@ -58,7 +59,7 @@ type Paxos struct {
 
   InsMap map[int]*Instance
   done []int
-  Seqs []int
+  Seqs *list.List
   Seq int // proposal seq
 }
 
@@ -380,10 +381,12 @@ func (px *Paxos) PrepareHandler(args *PreArgs, reply *PreReply) error {
 
   if ok == false {
     px.MakeInstance(seq)
+
     DPrintf("[INFO] %d prepare handler create ins %d ...\n", px.me, seq)
   }
 
   ins := px.InsMap[seq]
+  ins.Num = num
   reply.OK = false
 
   if num >= ins.Maxpre {
@@ -467,8 +470,14 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     ins.V = v // ?
     
     ins.OK = decided
-    px.Seqs = append(px.Seqs, seq)
-    DPrintf("[INFO] %d Seqs %v ...\n", px.me, px.Seqs)
+    px.Insert(seq)
+      
+    DPrintf("[INFO] %d Seqs [", px.me)
+    for iter := px.Seqs.Front();iter != nil ;iter = iter.Next() {
+      DPrintf("%v->%s ", iter.Value, px.InsMap[iter.Value.(int)].Num)
+    }
+    DPrintf("]\n")
+
     px.done[peer] = args.MaxDone
     reply.MaxDone = px.done[px.me]
 
@@ -476,6 +485,28 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     return nil
 }
 
+func (px *Paxos) Insert(seq int) {
+  if px.Seqs.Len() > 0 {
+    for iter := px.Seqs.Front();iter != nil ;iter = iter.Next() {
+
+      if px.InsMap[iter.Value.(int)].Num > px.InsMap[seq].Num {
+        px.Seqs.InsertBefore(seq, iter)
+        DPrintf("[INFO] %d insert %d before %d ...\n", px.me, seq, iter.Value)
+
+        return 
+      }
+
+    }
+    DPrintf("[INFO] %d insert %d back %d ...\n", px.me, seq, px.Seqs.Back().Value)
+    px.Seqs.PushBack(seq)
+    
+    return 
+  } else {
+    px.Seqs.PushBack(seq)
+    return 
+  }
+  
+}
 
 // generate unique number ascending order with time
 func (px *Paxos) Generate() string {
@@ -609,7 +640,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 
   // Your initialization code here.
   px.Seq = me
-  px.Seqs = make([]int, 0)
+  px.Seqs = list.New()
 
   px.InsMap = make(map[int]*Instance)
 

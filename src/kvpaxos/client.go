@@ -14,6 +14,7 @@ func MakeClerk(servers []string) *Clerk {
   ck := new(Clerk)
   ck.servers = servers
   // You'll have to add code here.
+  
   return ck
 }
 
@@ -51,6 +52,7 @@ func call(srv string, rpcname string,
 }
 
 func (ck *Clerk) pick() int {
+  
   ci := (rand.Int() % len(ck.servers))
 
   return ci
