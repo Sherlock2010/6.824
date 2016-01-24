@@ -33,7 +33,7 @@ import "strconv"
 import "container/list" 
 
 // Debugging
-const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -44,6 +44,7 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 
 type Paxos struct {
   mu sync.Mutex
+  mux sync.Mutex
   l net.Listener
   dead bool
   unreliable bool
@@ -469,14 +470,16 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
     DPrintf("[INFO] %d Change %d V from %v to %v ...\n",px.me, seq, ins.V, args.V)
     ins.V = v // ?
     
-    ins.OK = decided
     px.Insert(seq)
-      
+    ins.OK = decided
+    
     DPrintf("[INFO] %d Seqs [", px.me)
     for iter := px.Seqs.Front();iter != nil ;iter = iter.Next() {
-      DPrintf("%v->%s ", iter.Value, px.InsMap[iter.Value.(int)].Num)
+      // DPrintf("%v->%s ", iter.Value, px.InsMap[iter.Value.(int)].Num)
+      DPrintf("%v ", iter.Value)
     }
     DPrintf("]\n")
+    
 
     px.done[peer] = args.MaxDone
     reply.MaxDone = px.done[px.me]
@@ -486,23 +489,36 @@ func (px *Paxos) DecisionHandler(args *DecisionArgs, reply *DecisionReply) error
 }
 
 func (px *Paxos) Insert(seq int) {
+  px.mux.Lock()
   if px.Seqs.Len() > 0 {
     for iter := px.Seqs.Front();iter != nil ;iter = iter.Next() {
-      // DPrintf("[INFO] %d Try insert seq %d ...\n", px.me, iter.Value.(int))
+      DPrintf("[INFO] %d Try insert seq %d ...\n", px.me, iter.Value.(int))
+      
+      _, ok1 := px.InsMap[iter.Value.(int)]
+      if ok1 == false {
+        DPrintf("[INFO] (ok1) %d insMap %d not exit ...\n", px.me, iter.Value.(int))
+      }
+
+      _, ok2 := px.InsMap[seq]
+       if ok2 == false {
+        DPrintf("[INFO] (ok2) %d insMap %d not exit ...\n", px.me, seq)
+      }
+
       if px.InsMap[iter.Value.(int)].Num > px.InsMap[seq].Num {
         px.Seqs.InsertBefore(seq, iter)
         DPrintf("[INFO] %d insert %d before %d ...\n", px.me, seq, iter.Value)
-
+        px.mux.Unlock()
         return 
       }
 
     }
     DPrintf("[INFO] %d insert %d back %d ...\n", px.me, seq, px.Seqs.Back().Value)
     px.Seqs.PushBack(seq)
-    
+    px.mux.Unlock()
     return 
   } else {
     px.Seqs.PushBack(seq)
+    px.mux.Unlock()
     return 
   }
   
@@ -581,21 +597,26 @@ func (px *Paxos) Min() int {
       min = seq
     }
   }
+  px.mux.Lock()
   // fmt.Printf("[INFO] %d Min %d ...\n", px.me, min)
   for seq, ins := range px.InsMap {
     
-    if ins.Seq < min && ins.OK {
+    if ins.Seq < min && ins.OK && ins.Done{
       
       delete(px.InsMap, seq)
       for iter := px.Seqs.Front();iter != nil ;iter = iter.Next() {
         if iter.Value.(int) == seq {
+
           px.Seqs.Remove(iter)
+          DPrintf("[INFO] %d seqs delete Seq %d ...\n", px.me, seq)
           break
         }
       }
-      DPrintf("[INFO] %d delete Seq %d ...\n", px.me, seq)
+      DPrintf("[INFO] %d insmap delete Seq %d ...\n", px.me, seq)
     }
   }
+
+  px.mux.Unlock()
   
   return min + 1
 }

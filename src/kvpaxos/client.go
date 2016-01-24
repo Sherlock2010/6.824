@@ -104,7 +104,7 @@ func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
   
   ci := ck.pick()
   server := ck.servers[ci]
-  DPrintf("[INFO] Put %d key:%s, Value:%s, DoHash:%t ...\n", ci, key, value, dohash)
+  DPrintf("[INFO] Put %d key:%s, Value:%d, DoHash:%t ...\n", ci, key, len(value), dohash)
   //at most once 
   sent := false
   for !sent {

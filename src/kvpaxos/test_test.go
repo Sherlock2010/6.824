@@ -103,7 +103,7 @@ func TestBasic(t *testing.T) {
     var va [nservers]string
     for i := 0; i < nservers; i++ {
       va[i] = cka[i].Get("b")
-      fmt.Printf("[INFO] v[%v] %v, v[0] %v ...\n", i, va[i], va[0])
+      // fmt.Printf("[INFO] v[%v] %v, v[0] %v ...\n", i, va[i], va[0])
       if va[i] != va[0] {
         
         t.Fatalf("mismatch")
@@ -146,8 +146,8 @@ func TestBasic(t *testing.T) {
 //   runtime.ReadMemStats(&m0)
 //   // rtm's m0.Alloc is 2 MB
 
-//   // sz := 1000000
-//   sz := 10
+//   sz := 1000000
+//   // sz := 10
 //   items := 10
 
 //   for iters := 0; iters < 2; iters++ {
@@ -182,6 +182,7 @@ func TestBasic(t *testing.T) {
 //   // fmt.Printf("  Memory: before %v, after %v\n", m0.Alloc, m1.Alloc)
 
 //   allowed := m0.Alloc + uint64(nservers * items * sz * 2)
+
 //   if m1.Alloc > allowed {
 //     t.Fatalf("Memory use did not shrink enough (Used: %v, allowed: %v).\n", m1.Alloc, allowed)
 //   }

@@ -13,7 +13,7 @@ import "math/rand"
 import "time"
 import "strconv"
 
-const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -72,7 +72,7 @@ func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
   for {
     decided, _ := kv.px.Status(seq)
     if decided {
-      DPrintf("[INFO] Get Paxos seq %d, %v ...\n", seq, *args)
+      // DPrintf("[INFO] Get Paxos seq %d, %v ...\n", seq, *args)
       // process paxos log seq < seq
       kv.Process(seq)
 
@@ -114,7 +114,7 @@ func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
       key := args.Key
       value := args.Value
       doHash := args.DoHash
-      DPrintf("[INFO] Put Paxos seq %d, %v ...\n", seq, *args)
+      // DPrintf("[INFO] Put Paxos seq %d, %v ...\n", seq, *args)
       if doHash {
 
         // precess paxos log seq < seq
@@ -161,9 +161,10 @@ func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
     seq := iter.Value.(int)
 
     ins :=kv.px.InsMap[seq] 
-    DPrintf("[INFO] %d Prepare Execute Seq %d %v %t, curseq %d ...\n", kv.me, seq, ins.V, ins.Done, curseq)
-
+    DPrintf("[INFO] %d Try Prepare Execute Seq %d %v %t, curseq %d ...\n", kv.me, seq, ins.V, ins.Done, curseq)
     if ins.Num < N && ins.OK && !ins.Done{
+      DPrintf("[INFO] %d Prepare Execute Seq %d %v %t, curseq %d ...\n", kv.me, seq, ins.V, ins.Done, curseq)
+      // DPrintf("[INFO] %d Prepare Execute Seq %d %t, curseq %d ...\n", kv.me, seq, ins.Done, curseq)
       op, ok := ins.V.(Op)
 
       if ok == false {
@@ -203,6 +204,7 @@ func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
             kv.database[key] = value
             ins.Done = true
             DPrintf("[INFO] %d Put, Seq %d, key:%s, value:%s ...\n", kv.me, ins.Seq, key, kv.database[key])
+            // DPrintf("[INFO] %d Put, Seq %d, key:%s, value:%d ...\n", kv.me, ins.Seq, key, len(kv.database[key]))
 
           }
     
@@ -220,11 +222,11 @@ func (kv *KVPaxos) Process(curseq int) (Type, string, Err) {
         }
       }
 
-      min := kv.px.Min()
-      kv.px.Done(min)
+      kv.px.Done(ins.Seq)
     }
-
   }
+
+  kv.px.Min()
 
   return Nil, "", Nil
 }
